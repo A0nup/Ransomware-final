@@ -609,7 +609,7 @@ elif nav_page == "Model Performance":
 
     if CLASSIFICATION_REPORT_PATH.exists():
         st.markdown("#### 📄 Detailed Classification Report")
-        with open(CLASSIFICATION_REPORT_PATH, "r") as f:
+        with open(CLASSIFICATION_REPORT_PATH, "r", encoding="utf-8", errors="replace") as f:
             st.code(f.read(), language="text")
 
 # -----------------------------------------------------------------------------

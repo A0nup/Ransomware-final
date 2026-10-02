@@ -306,7 +306,7 @@ def train_hybrid_model() -> Dict[str, Any]:
         "training_time_seconds": round(total_training_time, 2),
     }
     exp_file = EXPERIMENTS_DIR / f"{experiment_id}.json"
-    with open(exp_file, "w") as f:
+    with open(exp_file, "w", encoding="utf-8") as f:
         json.dump(exp_metadata, f, indent=4)
     print(f"[+] Experiment metadata logged to: {exp_file}")
 

@@ -227,7 +227,7 @@ def evaluate_model() -> Dict[str, Any]:
         targets, y_pred, target_names=["BENIGN", "RANSOMWARE"], digits=4
     )
 
-    with open(CLASSIFICATION_REPORT_PATH, "w") as f:
+    with open(CLASSIFICATION_REPORT_PATH, "w", encoding="utf-8") as f:
         f.write("=" * 60 + "\n")
         f.write("PROPOSED MODEL TEST CLASSIFICATION REPORT\n")
         f.write(f"Threshold: {DEFAULT_THRESHOLD} | Test Samples: {len(targets)}\n")

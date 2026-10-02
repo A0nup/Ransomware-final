@@ -244,7 +244,7 @@ def run_eda(csv_path: Optional[Path] = None) -> None:
         "features": FEATURES,
         "class_breakdown": df.groupby("sequence_id")["label"].first().value_counts().to_dict(),
     }
-    with open(EDA_DIR / "eda_summary.json", "w") as f:
+    with open(EDA_DIR / "eda_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary_stats, f, indent=4)
 
     print("[+] EDA pipeline completed successfully.")

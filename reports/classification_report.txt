@@ -13,12 +13,12 @@ Threshold: 0.5 | Test Samples: 750
 weighted avg     0.9710    0.9707    0.9707       750
 
 Detailed Metrics:
-  • Accuracy:    0.9707
-  • Precision:   0.9584
-  • Recall:      0.9840
-  • F1-Score:    0.9711
-  • ROC-AUC:     0.9778
-  • Specificity: 0.9573
-  • FPR:         0.0427
-  • FNR:         0.0160
-  • Confusion Matrix: TN=359, FP=16, FN=6, TP=369
+  â€¢ Accuracy:    0.9707
+  â€¢ Precision:   0.9584
+  â€¢ Recall:      0.9840
+  â€¢ F1-Score:    0.9711
+  â€¢ ROC-AUC:     0.9778
+  â€¢ Specificity: 0.9573
+  â€¢ FPR:         0.0427
+  â€¢ FNR:         0.0160
+  â€¢ Confusion Matrix: TN=359, FP=16, FN=6, TP=369
