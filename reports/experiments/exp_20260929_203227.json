@@ -1,0 +1,16 @@
+{
+    "experiment_id": "exp_20260929_203227",
+    "timestamp": "2026-09-29T20:32:27.812916",
+    "seed": 42,
+    "dataset_size": 100000,
+    "sequence_length": 20,
+    "features": 20,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "architecture": "CNN-BiLSTM-Attention",
+    "best_epoch": 30,
+    "best_val_loss": 2.7650685024127595e-07,
+    "best_val_accuracy": 1.0,
+    "training_time_seconds": 43.1
+}

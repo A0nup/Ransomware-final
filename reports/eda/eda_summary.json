@@ -1,0 +1,30 @@
+{
+    "total_rows": 100000,
+    "total_sequences": 5000,
+    "features": [
+        "file_write_rate",
+        "file_rename_rate",
+        "file_delete_rate",
+        "entropy_delta",
+        "extension_change_rate",
+        "process_create_rate",
+        "shadow_copy_cmd_count",
+        "backup_delete_count",
+        "cpu_percent",
+        "memory_percent",
+        "network_conn_rate",
+        "file_open_rate",
+        "directory_traversal_rate",
+        "suspicious_api_rate",
+        "unique_extensions",
+        "encrypted_file_ratio",
+        "failed_access_rate",
+        "admin_action_rate",
+        "bytes_written_mb",
+        "new_unknown_process_rate"
+    ],
+    "class_breakdown": {
+        "0": 2500,
+        "1": 2500
+    }
+}
