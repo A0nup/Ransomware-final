@@ -405,15 +405,7 @@ elif nav_page == "Live Detection":
         )
 
     # Input Method Selection
-    input_choice = st.radio(
-        "Choose Analysis Target:",
-        [
-            "Use Predefined Sample Logs",
-            "Upload Custom CSV File",
-            "🔍 Inspect Executable File (.exe / Binary)",
-        ],
-        horizontal=True,
-    )
+    input_choice = st.radio("Choose Input Telemetry Source:", ["Use Predefined Sample Logs", "Upload Custom CSV File"], horizontal=True)
 
     input_df = None
 
@@ -446,7 +438,7 @@ elif nav_page == "Live Detection":
             input_df = st.session_state["active_sample"]
             st.info(f"Loaded: **{st.session_state.get('sample_name', 'Predefined Log')}** ({len(input_df)} time windows)")
 
-    elif input_choice == "Upload Custom CSV File":
+    else:
         uploaded_file = st.file_uploader("Upload Telemetry CSV (Minimum 20 rows)", type=["csv"])
         if uploaded_file is not None:
             try:
@@ -454,51 +446,6 @@ elif nav_page == "Live Detection":
                 st.success(f"Uploaded CSV with {len(input_df)} rows and {len(input_df.columns)} columns.")
             except Exception as e:
                 st.error(f"Error reading CSV file: {e}")
-
-    elif input_choice == "🔍 Inspect Executable File (.exe / Binary)":
-        st.markdown("#### 🔍 Direct Static Executable Scanner (Zero-Execution)")
-        st.markdown(
-            "Upload any Windows executable (`.exe`, `.dll`, `.scr`, `.bat`) to inspect PE structure, "
-            "Shannon entropy, and threat indicators in-memory without running the code."
-        )
-        exe_file = st.file_uploader(
-            "Drop or select executable file (.exe, .dll, binary)",
-            type=None,
-            key="analyst_live_exe_upload",
-            help="Analyzed statically in-memory. Zero execution."
-        )
-        if exe_file is not None:
-            file_bytes = exe_file.read()
-            with st.spinner("Analyzing executable binary statically..."):
-                res = inspect_executable_file(file_bytes, file_name=exe_file.name)
-
-            verdict = res["verdict"]
-            risk_score = res["risk_score"]
-            if verdict == "KNOWN_MALICIOUS":
-                st.error(f"🚨 **DANGER: High Risk Ransomware Indicator Detected!** (Risk Score: {risk_score}/100)")
-            elif verdict == "SUSPICIOUS":
-                st.warning(f"⚠️ **CAUTION: Suspicious Characteristics Detected!** (Risk Score: {risk_score}/100)")
-            else:
-                st.info(f"⚪ **INCONCLUSIVE / NO KNOWN STATIC THREATS** (Risk Score: {risk_score}/100)")
-                st.markdown("> **⚠️ Note:** Absence of static indicators does not guarantee safety. Dynamic behavioral analysis is recommended.")
-
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"- **SHA-256:** `{res.get('sha256', 'N/A')}`")
-                st.markdown(f"- **Size:** `{res.get('file_size_formatted', 'N/A')}`")
-                st.markdown(f"- **Format:** `{res.get('format', 'N/A')}`")
-                st.markdown(f"- **Entropy:** `{res.get('overall_entropy', 0.0):.2f} / 8.0`")
-            with c2:
-                st.markdown("**Summary:**")
-                st.write(res.get("plain_english_summary", ""))
-                st.markdown("**Recommended Next Steps:**")
-                for r in res.get("recommendations", []):
-                    st.markdown(f"- {r}")
-
-            if res.get("indicators"):
-                with st.expander("🔍 View Technical Indicators Found", expanded=True):
-                    for ind in res["indicators"]:
-                        st.markdown(f"- **{ind.get('category')}**: `{ind.get('indicator')}` ({ind.get('detail')})")
 
     # Perform Inference if Data is Ready
     if input_df is not None:
