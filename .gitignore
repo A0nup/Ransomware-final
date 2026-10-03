@@ -40,3 +40,9 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Security & Incident Runtime Outputs
+.quarantine/
+reports/incidents/*.json
+reports/incidents/*.csv
+!reports/incidents/.gitkeep
