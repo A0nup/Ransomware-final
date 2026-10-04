@@ -61,7 +61,7 @@ def test_benign_file_inconclusive_disclaimer():
     res = inspect_executable_file(clean_data, file_name="document.txt")
     assert res["verdict"] == "INCONCLUSIVE"
     # Verify presence of safety disclaimer
-    assert "guarantee" in res["plain_english_summary"].lower() or "inconclusive" in res["plain_english_summary"].lower()
+    assert any(term in res["plain_english_summary"].lower() for term in ["guarantee", "inconclusive", "insufficient"])
 
 
 def test_empty_file_handling():

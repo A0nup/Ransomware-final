@@ -345,7 +345,7 @@ def inspect_executable_file(file_path_or_bytes, file_name: str = "uploaded_file.
         verdict_badge = "⚪ INCONCLUSIVE FILE TYPE"
         plain_english_summary = (
             f"The uploaded file is formatted as '{detected_format}'. The static scanner specializes in Windows PE executables. "
-            "Evidence is insufficient to determine whether this file is benign or harmful without dynamic analysis."
+            "Evidence is inconclusive and does NOT guarantee safety without dynamic behavioral analysis."
         )
     else:
         # Valid PE with low risk score

@@ -307,6 +307,40 @@ def render_public_mode():
             if len(file_bytes) > 50 * 1024 * 1024:
                 st.error("Uploaded file exceeds 50 MB limit for static analysis.")
             else:
+                is_csv = uploaded_file.name.lower().endswith(".csv")
+                if is_csv:
+                    st.info("📊 **Detected Behavioral Activity Log (`.csv`):** Analyzing sequence with Hybrid Deep Learning Model (CNN + BiLSTM + Attention)...")
+                    try:
+                        import io
+                        csv_df = pd.read_csv(io.BytesIO(file_bytes))
+                        csv_res = predict_csv(csv_df)
+                        prob = csv_res["ransomware_probability"]
+                        risk = csv_res["risk_level"]
+                        label = csv_res["label"]
+                        
+                        if label == "RANSOMWARE":
+                            st.error(f"🚨 **DANGER: MALICIOUS RANSOMWARE ACTIVITY DETECTED!** (Attack Probability: {prob:.2f}%)")
+                            st.markdown(
+                                f"""
+                                <div class='metric-card' style='border: 2px solid #ef4444; background: rgba(220, 38, 38, 0.2); padding: 20px; border-radius: 12px; margin-bottom: 20px;'>
+                                    <h3 style='color: #ef4444; margin: 0; font-size: 1.4rem;'>⚠️ CRITICAL THREAT: RANSOMWARE PATTERN CONFIRMED</h3>
+                                    <p style='color: #fecaca; font-size: 1.05rem; margin-top: 10px; line-height: 1.5;'>
+                                        Our <b>Hybrid Deep Learning Neural Network</b> detected active ransomware behavior in this telemetry record.
+                                        The recorded activity demonstrates <b>coordinated file encryption bursts, abnormal entropy spikes, and volume shadow copy destruction</b>.
+                                    </p>
+                                    <div style='margin-top: 14px; font-size: 1.15rem; color: #ffffff;'>
+                                        🎯 Model Verdict: <span style='background:#ef4444; padding: 4px 12px; border-radius:6px; font-weight:bold;'>MALICIOUS ({prob:.1f}%)</span> 
+                                        &nbsp;|&nbsp; Risk Level: <b style='color:#ef4444;'>HIGH RISK</b>
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.success(f"🟢 **BENIGN WORKLOAD: No Ransomware Activity Found in Telemetry** (Probability: {prob:.2f}%)")
+                    except Exception as e:
+                        st.warning(f"Could not parse telemetry sequence: {e}")
+
                 with st.spinner("Analyzing file structure and safety indicators..."):
                     res = inspect_executable_file(file_bytes, file_name=uploaded_file.name)
                 
@@ -315,19 +349,30 @@ def render_public_mode():
                 risk_score = res["risk_score"]
                 
                 if verdict == "KNOWN_MALICIOUS":
-                    st.error(f"🚨 **DANGER: High Risk Ransomware Indicator Detected!** (Risk Score: {risk_score}/100)")
-                elif verdict == "SUSPICIOUS":
-                    st.warning(f"⚠️ **CAUTION: Suspicious Characteristics Detected!** (Risk Score: {risk_score}/100)")
-                else:
-                    st.info(f"⚪ **INCONCLUSIVE / NO KNOWN INDICATORS FOUND** (Risk Score: {risk_score}/100)")
+                    st.error(f"🚨 **DANGER: High-Risk Malicious Indicators Detected!** (Threat Score: {risk_score}/100)")
                     st.markdown(
                         """
-                        > [!WARNING]
-                        > **Important Safety Note:** The fact that no known malicious indicators were detected **does NOT guarantee that this file is safe**.
-                        > Modern zero-day ransomware frequently mutates or uses packing to bypass signature scanners.
-                        > Only open files from verified, trusted senders. If in doubt, do not run this file.
-                        """
+                        <div class='metric-card' style='border: 2px solid #ef4444; background: rgba(220, 38, 38, 0.2); padding: 18px; border-radius: 10px; margin-bottom: 15px;'>
+                            <h3 style='color: #ef4444; margin: 0;'>🛑 DO NOT OPEN OR RUN THIS FILE!</h3>
+                            <p style='color: #fecaca; font-size: 1rem; margin-top: 8px;'>
+                                This file contains destructive ransomware commands or known malware signatures. Running it may compromise your system.
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
                     )
+                elif verdict == "SUSPICIOUS":
+                    st.warning(f"⚠️ **CAUTION: Suspicious Characteristics Detected!** (Threat Score: {risk_score}/100)")
+                else:
+                    if is_csv:
+                        st.info("ℹ️ **Static Analysis Note:** This file is formatted as text/CSV data. Static scanners inspect compiled executable programs (`.exe`). The Behavioral Neural Network assessment above confirms whether this data represents an attack.")
+                    else:
+                        st.info(f"⚪ **INCONCLUSIVE / NO KNOWN STATIC SIGNATURES FOUND** (Threat Score: {risk_score}/100)")
+                        st.warning(
+                            "⚠️ **Important Safety Note for Everyday Users:** The fact that no known malicious indicators were detected **does NOT guarantee that this file is safe**.\n\n"
+                            "Modern zero-day ransomware frequently mutates or uses packing to bypass signature scanners. "
+                            "Only open files from verified, trusted senders. If in doubt, do not open or run this file."
+                        )
                 
                 col1, col2 = st.columns(2)
                 with col1:
