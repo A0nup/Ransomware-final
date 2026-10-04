@@ -4,6 +4,10 @@ Interactive Dashboard featuring Live Detection, Dataset Exploration, Model Compa
 Ablation Studies, Threshold Analysis, Attention Weights, and Academic Documentation.
 """
 
+import os
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 import json
 import pandas as pd
@@ -413,10 +417,10 @@ def render_endpoint_edr_page():
                 dummy_p.write_text("Simulated suspicious content for containment.")
             monitor = EndpointMonitor()
             res_q = monitor.quarantine_file(str(dummy_p), reason="Analyst manual triage")
-            if res_q["success"]:
+            if res_q.get("success") or res_q.get("status") == "SUCCESS":
                 st.success(f"Quarantined to `{res_q['quarantine_path']}` with mode 0400 (read-only isolation).")
             else:
-                st.error(res_q.get("error"))
+                st.error(res_q.get("message") or res_q.get("error", "Quarantine failed"))
         
         st.markdown("##### 2. Process Termination Guardrail")
         pid_term = st.number_input("Target Process PID:", min_value=1, max_value=999999, value=12345)
@@ -427,10 +431,10 @@ def render_endpoint_edr_page():
             else:
                 monitor = EndpointMonitor()
                 res_k = monitor.terminate_process(int(pid_term), force=False)
-                if res_k["success"]:
+                if res_k.get("success") or res_k.get("status") == "SUCCESS":
                     st.success(f"Process {pid_term} safely signaled.")
                 else:
-                    st.error(f"Termination prevented: {res_k.get('error')}")
+                    st.error(f"Termination prevented: {res_k.get('message') or res_k.get('error', 'Termination blocked')}")
         
         st.markdown("##### 3. Export Incident Report")
         if st.button("Generate & Export Incident Report (JSON/CSV)"):

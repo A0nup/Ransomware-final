@@ -48,22 +48,6 @@ DEFAULT_QUARANTINE_DIR = Path(".quarantine")
 DEFAULT_INCIDENT_DIR = Path("reports/incidents")
 
 
-class IncidentReportResult(str):
-    """Custom string that also supports dict-like key access for json_path and csv_path."""
-    def __new__(cls, main_path: str, json_path: str = "", csv_path: str = ""):
-        instance = super().__new__(cls, main_path)
-        instance.json_path = json_path or main_path
-        instance.csv_path = csv_path or main_path
-        return instance
-
-    def __getitem__(self, item):
-        if item == "json_path":
-            return self.json_path
-        if item == "csv_path":
-            return self.csv_path
-        return super().__getitem__(item)
-
-
 class EndpointMonitor:
     """
     Continuous endpoint telemetry monitor and live inference engine.
@@ -449,58 +433,14 @@ class EndpointMonitor:
             "alert_count": len(self.alerts),
         }
 
-    def sample_telemetry(self) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """Sample host telemetry once, append to internal rolling buffer, and return vector and metadata."""
-        vec, meta = self._sample_current_telemetry_vector()
-        with self._lock:
-            self.history_buffer.append(vec)
-            self.raw_event_log.append(meta)
-        return vec, meta
-
-    def get_current_dataframe(self) -> pd.DataFrame:
-        """Return the current rolling history buffer as a structured DataFrame."""
-        with self._lock:
-            if not self.history_buffer:
-                return pd.DataFrame(columns=FEATURES)
-            data_arr = np.array(list(self.history_buffer), dtype=np.float32)
-            return pd.DataFrame(data_arr, columns=FEATURES)
-
-    def score_window(self, model=None, scaler=None) -> Tuple[float, str]:
-        """Score current rolling buffer with neural model. Returns (probability, risk_level)."""
-        m = model or self._model
-        s = scaler or self._scaler
-        with self._lock:
-            curr_len = len(self.history_buffer)
-            if curr_len == 0:
-                mat = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
-            else:
-                mat = np.array(list(self.history_buffer), dtype=np.float32)
-                if curr_len < SEQ_LEN:
-                    pad = np.repeat(mat[:1], SEQ_LEN - curr_len, axis=0)
-                    mat = np.vstack([pad, mat])
-
-        prob = 0.008
-        if m is not None and s is not None:
-            try:
-                scaled = s.transform(mat)
-                t = torch.tensor(scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
-                with torch.no_grad():
-                    logits, _ = m(t)
-                    prob = float(torch.sigmoid(logits).item())
-            except Exception:
-                prob = 0.008
-
-        risk = "HIGH" if prob >= 0.70 else ("MEDIUM" if prob >= 0.30 else "LOW")
-        return prob, risk
-
-    def quarantine_file(self, target_path: str, reason: str = "") -> Dict[str, Any]:
+    def quarantine_file(self, target_path: str) -> Dict[str, Any]:
         """
         Safely move a suspicious file into an isolated quarantine repository.
         Applies read-only and no-exec permissions (chmod 0400) to neutralize it.
         """
         p = Path(target_path).resolve()
         if not p.exists() or not p.is_file():
-            return {"status": "ERROR", "success": False, "message": f"Target file does not exist: {target_path}", "error": f"Target file does not exist: {target_path}"}
+            return {"status": "ERROR", "message": f"Target file does not exist: {target_path}"}
 
         try:
             # Compute hash before moving
@@ -521,7 +461,6 @@ class EndpointMonitor:
                 "original_path": str(p),
                 "quarantine_path": str(dest_path),
                 "sha256": file_hash,
-                "reason": reason,
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             }
             ledger_data = []
@@ -537,67 +476,57 @@ class EndpointMonitor:
 
             return {
                 "status": "SUCCESS",
-                "success": True,
                 "message": f"File quarantined safely to {dest_path.name}",
                 "original_path": str(p),
                 "quarantine_path": str(dest_path),
                 "sha256": file_hash,
             }
         except Exception as e:
-            return {"status": "ERROR", "success": False, "message": f"Quarantine failed: {str(e)}", "error": str(e)}
+            return {"status": "ERROR", "message": f"Quarantine failed: {str(e)}"}
 
-    def terminate_process_safely(self, pid: int, confirm: bool = False, force: bool = False) -> Dict[str, Any]:
+    def terminate_process_safely(self, pid: int, confirm: bool = False) -> Dict[str, Any]:
         """Safely terminate a rogue process given explicit confirmation."""
         if not confirm:
-            return {"status": "CONFIRMATION_REQUIRED", "success": False, "message": "Termination requires explicit user confirmation.", "error": "Confirmation required"}
+            return {"status": "CONFIRMATION_REQUIRED", "message": "Termination requires explicit user confirmation."}
         try:
             p = psutil.Process(pid)
             name = p.name()
-            if force:
-                p.kill()
-            else:
-                p.terminate()
+            p.terminate()
             p.wait(timeout=2.0)
-            return {"status": "SUCCESS", "success": True, "message": f"Process {name} (PID: {pid}) terminated successfully."}
+            return {"status": "SUCCESS", "message": f"Process {name} (PID: {pid}) terminated successfully."}
         except Exception as e:
-            return {"status": "ERROR", "success": False, "message": f"Failed to terminate PID {pid}: {str(e)}", "error": str(e)}
+            return {"status": "ERROR", "message": f"Failed to terminate PID {pid}: {str(e)}"}
 
-    def terminate_process(self, pid: int, force: bool = False) -> Dict[str, Any]:
-        """Convenience alias for process termination with guardrails."""
-        return self.terminate_process_safely(pid=pid, confirm=True, force=force)
-
-    def export_incident_report(self, out_format: str = "json", threat_level: str = "ANALYST_EXPORT", probability: float = 0.0) -> Any:
-        """Export comprehensive incident response log in JSON and CSV format."""
+    def export_incident_report(self, out_format: str = "json") -> str:
+        """Export comprehensive incident response log in JSON or CSV format."""
         ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         with self._lock:
             alert_records = list(self.alerts)
 
-        csv_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.csv"
-        df = pd.DataFrame(alert_records) if alert_records else pd.DataFrame([{"timestamp": ts_str, "threat_level": threat_level, "probability": probability}])
-        df.to_csv(csv_file, index=False)
+        if out_format.lower() == "csv":
+            out_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.csv"
+            df = pd.DataFrame(alert_records)
+            df.to_csv(out_file, index=False)
+        else:
+            out_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.json"
+            report_data = {
+                "incident_id": f"INC-{ts_str}",
+                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "monitored_host": os.uname().nodename if hasattr(os, "uname") else "Endpoint",
+                "watch_path": str(self.watch_path),
+                "total_alerts": len(alert_records),
+                "alerts": alert_records,
+                "recovery_guidance": [
+                    "Verify integrity of Volume Shadow Copies and system restore points.",
+                    "Disconnect the host from internal network segments to prevent lateral movement.",
+                    "Review all processes running unverified executables in %TEMP% or /tmp.",
+                    "Restore affected files from off-site or immutable cloud backup repositories.",
+                ],
+            }
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(report_data, f, indent=4)
 
-        json_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.json"
-        report_data = {
-            "incident_id": f"INC-{ts_str}",
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "monitored_host": os.uname().nodename if hasattr(os, "uname") else "Endpoint",
-            "watch_path": str(self.watch_path),
-            "threat_level": threat_level,
-            "probability": probability,
-            "total_alerts": len(alert_records),
-            "alerts": alert_records,
-            "recovery_guidance": [
-                "Verify integrity of Volume Shadow Copies and system restore points.",
-                "Disconnect the host from internal network segments to prevent lateral movement.",
-                "Review all processes running unverified executables in %TEMP% or /tmp.",
-                "Restore affected files from off-site or immutable cloud backup repositories.",
-            ],
-        }
-        with open(json_file, "w", encoding="utf-8") as f:
-            json.dump(report_data, f, indent=4)
-
-        target_file = str(csv_file) if str(out_format).lower() == "csv" else str(json_file)
-        return IncidentReportResult(target_file, json_path=str(json_file), csv_path=str(csv_file))
+        return str(out_file)
 
 
 # Singleton monitor instance for the application session
