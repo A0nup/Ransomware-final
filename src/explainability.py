@@ -19,6 +19,7 @@ from src.config import (
     FEATURE_IMPORTANCE_PATH,
     FEATURE_IMPORTANCE_PLOT_PATH,
     FEATURES,
+    SEQ_LEN,
     SEED,
     BATCH_SIZE,
     DEVICE,
@@ -169,5 +170,167 @@ def run_explainability() -> pd.DataFrame:
     return imp_df
 
 
+FEATURE_READABLE_NAMES = {
+    "file_write_rate": "File Write Rate (ops/s)",
+    "file_rename_rate": "File Rename Rate (ops/s)",
+    "file_delete_rate": "File Delete Rate (ops/s)",
+    "entropy_delta": "Shannon Entropy Delta (Randomness)",
+    "extension_change_rate": "Extension Rename Rate (.locked)",
+    "process_create_rate": "Process Creation Rate (PIDs/s)",
+    "shadow_copy_cmd_count": "Shadow Copy Deletion (vssadmin)",
+    "backup_delete_count": "Backup Catalog Deletion (wbadmin)",
+    "cpu_percent": "Host CPU Utilization (%)",
+    "memory_percent": "Host Memory Utilization (%)",
+    "network_conn_rate": "Active Network Sockets",
+    "file_open_rate": "File Open Handles (/s)",
+    "directory_traversal_rate": "Directory Traversal Speed",
+    "suspicious_api_rate": "Suspicious Crypto API Calls",
+    "unique_extensions": "Distinct File Extensions Targeted",
+    "encrypted_file_ratio": "Encrypted Files Ratio",
+    "failed_access_rate": "Access Denied Frequency",
+    "admin_action_rate": "Elevated Privilege Actions",
+    "bytes_written_mb": "Total Disk Write Throughput (MB)",
+    "new_unknown_process_rate": "Unverified Process Spawns",
+}
+
+
+def compute_sample_attribution(
+    model: torch.nn.Module,
+    scaler: Any,
+    input_tensor_or_array: Any,
+) -> Dict[str, Any]:
+    """
+    Compute local feature attribution scores (SHAP-style) and temporal attention
+    decomposition for an individual sequence. Explains *why* the model made its verdict.
+    """
+    import plotly.graph_objects as go
+    model.eval()
+
+    if isinstance(input_tensor_or_array, np.ndarray):
+        if input_tensor_or_array.ndim == 2:
+            raw_matrix = input_tensor_or_array.astype(np.float32)
+        elif input_tensor_or_array.ndim == 3:
+            raw_matrix = input_tensor_or_array[0].astype(np.float32)
+        else:
+            raw_matrix = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
+    elif isinstance(input_tensor_or_array, pd.DataFrame):
+        raw_matrix = input_tensor_or_array[FEATURES].to_numpy(dtype=np.float32)
+        if len(raw_matrix) < SEQ_LEN:
+            pad = np.repeat(raw_matrix[:1], SEQ_LEN - len(raw_matrix), axis=0)
+            raw_matrix = np.vstack([pad, raw_matrix])
+        else:
+            raw_matrix = raw_matrix[-SEQ_LEN:]
+    else:
+        raw_matrix = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
+
+    # Scale the sequence
+    try:
+        scaled = scaler.transform(raw_matrix)
+    except Exception:
+        scaled = raw_matrix
+
+    x = torch.tensor(scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
+    x.requires_grad_(True)
+
+    logits, attn = model(x)
+    prob = float(torch.sigmoid(logits).item())
+
+    # Gradient computation for attribution
+    model.zero_grad()
+    logits.backward(retain_graph=True)
+    grad = x.grad.data.cpu().numpy()[0]  # (20, 20)
+    x_val = x.data.cpu().numpy()[0]
+
+    # Input * Gradient attribution per timestep
+    temporal_attr = grad * x_val  # (20, 20)
+    attn_weights = attn.squeeze(0).detach().cpu().numpy() if attn is not None else np.ones(SEQ_LEN) / SEQ_LEN
+
+    # Combine temporal attention with gradient attribution: feature_attribution = sum_t (attn[t] * temporal_attr[t, f])
+    feature_impacts = np.zeros(len(FEATURES), dtype=np.float32)
+    for t in range(SEQ_LEN):
+        feature_impacts += attn_weights[t] * temporal_attr[t]
+
+    abs_sum = np.sum(np.abs(feature_impacts))
+    if abs_sum > 1e-6:
+        pct_contributions = (feature_impacts / abs_sum) * 100.0
+    else:
+        latest_vec = raw_matrix[-1]
+        norm = np.sum(np.abs(latest_vec)) + 1e-6
+        pct_contributions = (latest_vec / norm) * 100.0
+
+    contributions_list = []
+    for idx, feat_name in enumerate(FEATURES):
+        val = float(raw_matrix[-1, idx])
+        impact = float(pct_contributions[idx])
+        direction = "MALICIOUS" if impact > 0 else "BENIGN"
+        readable = FEATURE_READABLE_NAMES.get(feat_name, feat_name)
+        contributions_list.append({
+            "feature": feat_name,
+            "readable_name": readable,
+            "raw_value": val,
+            "contribution_pct": round(impact, 2),
+            "abs_impact": abs(round(impact, 2)),
+            "direction": direction,
+        })
+
+    contributions_list.sort(key=lambda item: item["abs_impact"], reverse=True)
+
+    top_pos = [c for c in contributions_list if c["direction"] == "MALICIOUS"]
+    if top_pos and prob >= 0.50:
+        primary = top_pos[0]
+        secondary = top_pos[1] if len(top_pos) > 1 else None
+        smoking_gun = (
+            f"Primary trigger: {primary['readable_name']} contributed {primary['contribution_pct']:+.1f}% "
+            f"towards the ransomware verdict (measured value: {primary['raw_value']:.2f})."
+        )
+        if secondary:
+            smoking_gun += f" Corroborated by {secondary['readable_name']} ({secondary['contribution_pct']:+.1f}%)."
+    else:
+        smoking_gun = "Workload metrics remain within nominal operational boundaries. No anomalous attack trigger detected."
+
+    return {
+        "probability": round(prob * 100.0, 2),
+        "risk_level": "CRITICAL" if prob >= 0.90 else ("HIGH" if prob >= 0.70 else ("MEDIUM" if prob >= 0.30 else "LOW")),
+        "contributions": contributions_list,
+        "top_features": contributions_list[:5],
+        "attention_weights": [round(float(w), 4) for w in attn_weights],
+        "smoking_gun": smoking_gun,
+        "max_attention_timestep": int(np.argmax(attn_weights)),
+    }
+
+
+def create_attribution_bar_chart(explain_result: Dict[str, Any], top_n: int = 8):
+    """Generate interactive Plotly horizontal bar chart of feature contributions."""
+    import plotly.graph_objects as go
+    top_items = explain_result["contributions"][:top_n]
+    top_items = list(reversed(top_items))
+
+    names = [item["readable_name"] for item in top_items]
+    impacts = [item["contribution_pct"] for item in top_items]
+    colors = ["#ef4444" if val > 0 else "#10b981" for val in impacts]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=names,
+        x=impacts,
+        orientation="h",
+        marker=dict(color=colors, line=dict(color="rgba(255,255,255,0.2)", width=1)),
+        text=[f"{val:+.1f}%" for val in impacts],
+        textposition="auto",
+        hovertemplate="<b>%{y}</b><br>Attribution Force: %{x:+.2f}%<extra></extra>",
+    ))
+
+    fig.update_layout(
+        title=f"Feature Attribution Decomposition (Model Probability: {explain_result['probability']}%)",
+        xaxis_title="Contribution to Ransomware Likelihood (%)",
+        yaxis_title="",
+        template="plotly_dark",
+        height=360,
+        margin=dict(l=20, r=20, t=40, b=20),
+    )
+    return fig
+
+
 if __name__ == "__main__":
     run_explainability()
+

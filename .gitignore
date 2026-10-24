@@ -49,3 +49,6 @@ reports/incidents/*.csv
 data/live_threat_logs/*.jsonl
 data/live_threat_logs/*.json
 !data/live_threat_logs/.gitkeep
+data/model_monitoring/*.jsonl
+data/model_monitoring/*.json
+!data/model_monitoring/.gitkeep

@@ -46,6 +46,15 @@ from src.static_scanner import inspect_executable_file
 from src.endpoint_monitor import EndpointMonitor, get_global_endpoint_monitor
 from src.preprocessing import load_scaler
 from src.evaluate import load_trained_model
+from src.explainability import compute_sample_attribution, create_attribution_bar_chart, FEATURE_READABLE_NAMES
+from src.mitre_attack import map_threat_to_mitre
+from src.ioc_extractor import extract_iocs_from_data, export_iocs_to_stix, export_iocs_to_csv
+from src.threat_intel import query_threat_intel_hash, query_ip_reputation
+from src.entropy_analyzer import compute_sliding_block_entropy, create_entropy_profile_chart
+from src.report_generator import generate_pdf_incident_report
+from src.model_monitoring import record_prediction_audit, record_analyst_feedback, get_drift_and_monitoring_metrics
+from src.hybrid_rules import scan_with_yara_rules, scan_with_sigma_rules, compute_hybrid_fused_score
+from src.batch_analyzer import process_batch_files
 
 # -----------------------------------------------------------------------------
 # Streamlit Page Configuration & Custom Theme
@@ -180,6 +189,8 @@ if app_mode == "🔬 Cybersecurity Analyst Mode":
             "Scientific Validation & Audit",
             "Dataset Explorer",
             "Live Detection",
+            "📦 Batch Telemetry Triage",
+            "📊 Model Drift & Monitoring",
             "Model Performance",
             "Model Comparison",
             "Ablation Study",
@@ -455,6 +466,555 @@ def render_live_edr_analyst_fragment(monitor):
             st.dataframe(df_cur.tail(10), use_container_width=True)
 
 
+def render_soc_extended_analysis_tabs(
+    file_bytes: bytes,
+    file_name: str,
+    probability: float,
+    risk_level: str,
+    input_df: Optional[pd.DataFrame] = None,
+    static_res: Optional[Dict[str, Any]] = None,
+    telemetry_meta: Optional[Dict[str, Any]] = None,
+    prefix_key: str = "soc",
+):
+    import uuid
+    if not isinstance(file_bytes, bytes):
+        file_bytes = str(file_bytes).encode("utf-8", errors="ignore")
+
+    prob_norm = (probability / 100.0) if probability > 1.0 else probability
+    prob_pct = prob_norm * 100.0
+
+    # 1. IOC Extraction
+    iocs = extract_iocs_from_data(file_bytes, file_name=file_name)
+    sha256 = iocs.get("hashes", {}).get("sha256", "")
+
+    # 2. MITRE ATT&CK Mapping
+    mitre_techs = map_threat_to_mitre(
+        telemetry_meta=telemetry_meta,
+        static_indicators=static_res.get("indicators") if static_res else [],
+        probability=prob_norm,
+    )
+
+    # 3. Hybrid Rules & Fused Score
+    yara_hits = scan_with_yara_rules(file_bytes)
+    sigma_hits = scan_with_sigma_rules(telemetry_meta or {})
+    fused = compute_hybrid_fused_score(prob_norm, yara_hits, sigma_hits)
+
+    # 4. Sliding Block Entropy
+    entropy_res = compute_sliding_block_entropy(file_bytes)
+
+    # 5. Threat Intelligence
+    threat_intel = query_threat_intel_hash(sha256)
+
+    # 6. Explainability / Feature Attribution
+    explain_res = None
+    if input_df is not None:
+        try:
+            eval_df = input_df.copy()
+            for col in FEATURES:
+                if col not in eval_df.columns:
+                    eval_df[col] = 0.0
+            model = load_trained_model(MODEL_CHECKPOINT_PATH, device="cpu")
+            scaler = load_scaler(SCALER_PATH)
+            explain_res = compute_sample_attribution(model, scaler, eval_df)
+        except Exception:
+            explain_res = None
+
+    # Automatic Prediction Audit Record
+    top_feature_name = "entropy_delta"
+    if explain_res and explain_res.get("top_features"):
+        top_feature_name = explain_res["top_features"][0]["feature"]
+    elif static_res and static_res.get("indicators"):
+        top_feature_name = static_res["indicators"][0].get("category", "static_pe_signature")
+
+    record_prediction_audit(
+        sample_id=file_name,
+        probability=prob_norm,
+        risk_level=risk_level,
+        top_feature=top_feature_name,
+    )
+
+    st.markdown("---")
+    st.markdown("### 🔬 SOC-Grade Forensic & Intelligence Suite")
+    st.markdown(
+        "Automated tier-3 SOC analysis: Neural feature forces, MITRE ATT&CK correlation, "
+        "forensic IOC exports, sliding block entropy profiling, threat intelligence enrichment, and 1-click incident reporting."
+    )
+
+    tab_exp, tab_mitre, tab_ioc, tab_ent, tab_ti, tab_hyb, tab_pdf, tab_feed = st.tabs([
+        "🔬 Explainability (SHAP)",
+        "🎯 MITRE ATT&CK",
+        "🔍 IOCs & STIX 2.1",
+        "📈 Block Entropy",
+        "🌐 Threat Intelligence",
+        "🛡️ Hybrid Score Fusion",
+        "📄 PDF Incident Report",
+        "👍 Analyst Feedback",
+    ])
+
+    with tab_exp:
+        st.markdown("#### 🔬 Neural Feature Attribution & Decision Forces")
+        if explain_res is not None:
+            st.markdown(
+                f"""
+                <div style="background: rgba(59, 130, 246, 0.12); border-left: 4px solid #3b82f6; padding: 14px 18px; border-radius: 0 8px 8px 0; margin-bottom: 16px;">
+                    <h4 style="color: #60a5fa; margin: 0 0 6px 0;">🎯 Primary Decision Trigger (Smoking Gun)</h4>
+                    <p style="color: #e2e8f0; margin: 0; font-size: 0.96rem;">{explain_res['smoking_gun']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            fig_attr = create_attribution_bar_chart(explain_res, top_n=8)
+            st.plotly_chart(fig_attr, use_container_width=True)
+
+            c_pos, c_neg = st.columns(2)
+            with c_pos:
+                st.markdown("**🔴 Escalating Forces (Pushing toward Ransomware):**")
+                pos_feats = [c for c in explain_res["contributions"] if c["direction"] == "MALICIOUS"][:4]
+                if pos_feats:
+                    for f in pos_feats:
+                        st.markdown(f"- **{f['readable_name']}**: `{f['contribution_pct']:+.1f}%` (measured: `{f['raw_value']:.2f}`)")
+                else:
+                    st.write("None. All operational telemetry remained nominal.")
+            with c_neg:
+                st.markdown("**🟢 Mitigating Forces (Pushing toward Benign):**")
+                neg_feats = [c for c in explain_res["contributions"] if c["direction"] == "BENIGN"][:4]
+                if neg_feats:
+                    for f in neg_feats:
+                        st.markdown(f"- **{f['readable_name']}**: `{f['contribution_pct']:+.1f}%` (measured: `{f['raw_value']:.2f}`)")
+                else:
+                    st.write("None.")
+        else:
+            st.info("ℹ️ Static binary inspected. For deep 20-second temporal neural attribution across sequence features, upload behavioral telemetry (.csv) or inspect live endpoint streams.")
+
+    with tab_mitre:
+        st.markdown("#### 🎯 MITRE ATT&CK Matrix Correlation")
+        st.markdown("Correlated attack techniques mapped directly to the official MITRE Enterprise ATT&CK matrix.")
+        if mitre_techs:
+            for tech in mitre_techs:
+                conf_color = "#ef4444" if tech["confidence"] == "CRITICAL" else ("#f59e0b" if tech["confidence"] == "HIGH" else "#3b82f6")
+                st.markdown(
+                    f"""
+                    <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid {conf_color}; border-radius: 6px; padding: 12px 16px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 1.05rem; font-weight: bold; color: #f8fafc;">
+                                <a href="{tech['url']}" target="_blank" style="color: #60a5fa; text-decoration: none;">{tech['id']}: {tech['name']}</a>
+                            </span>
+                            <span style="background: {conf_color}; color: #ffffff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">
+                                {tech['confidence']} CONFIDENCE
+                            </span>
+                        </div>
+                        <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 4px;">
+                            Tactic: <b>{tech['tactic']}</b> &nbsp;|&nbsp; <i>{tech['description']}</i>
+                        </div>
+                        <div style="color: #cbd5e1; font-size: 0.9rem; margin-top: 6px;">
+                            <b>Observed Evidence:</b> <code>{tech['evidence']}</code>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.success("🟢 No MITRE ATT&CK attack techniques triggered by this workload.")
+
+    with tab_ioc:
+        st.markdown("#### 🔍 Automated IOC Extraction & Threat Sharing")
+        c_hash, c_net, c_host = st.columns(3)
+        with c_hash:
+            st.markdown("**Cryptographic Hashes:**")
+            st.code(f"SHA-256:\n{iocs['hashes']['sha256']}\n\nSHA-1:\n{iocs['hashes']['sha1']}\n\nMD5:\n{iocs['hashes']['md5']}")
+        with c_net:
+            st.markdown("**Network Indicators:**")
+            st.write(f"- **IPv4 Addresses:** `{iocs['network']['ipv4'] or 'None observed'}`")
+            st.write(f"- **Domains:** `{iocs['network']['domains'] or 'None observed'}`")
+            st.write(f"- **C2 URLs:** `{iocs['network']['urls'] or 'None observed'}`")
+        with c_host:
+            st.markdown("**Host Artifacts:**")
+            st.write(f"- **Registry Keys:** `{iocs['host']['registry_keys'] or 'None observed'}`")
+            st.write(f"- **Ransom Extensions:** `{iocs['host']['ransom_extensions'] or 'None observed'}`")
+
+        st.markdown("##### 📥 Export Threat Feeds for SIEM / MISP / OpenCTI")
+        c_exp1, c_exp2, c_exp3 = st.columns(3)
+        with c_exp1:
+            stix_bundle_data = export_iocs_to_stix(iocs, threat_name=f"Detection-{file_name}")
+            st.download_button(
+                "📦 Export STIX 2.1 Bundle (JSON)",
+                data=stix_bundle_data,
+                file_name=f"stix_bundle_{file_name}.json",
+                mime="application/json",
+                key=f"{prefix_key}_stix_btn",
+                use_container_width=True,
+            )
+        with c_exp2:
+            csv_ioc_data = export_iocs_to_csv(iocs)
+            st.download_button(
+                "📄 Export IOC Table (CSV)",
+                data=csv_ioc_data,
+                file_name=f"iocs_{file_name}.csv",
+                mime="text/csv",
+                key=f"{prefix_key}_csv_btn",
+                use_container_width=True,
+            )
+        with c_exp3:
+            raw_json_data = json.dumps(iocs, indent=2)
+            st.download_button(
+                "📝 Export Raw IOCs (JSON)",
+                data=raw_json_data,
+                file_name=f"iocs_{file_name}.json",
+                mime="application/json",
+                key=f"{prefix_key}_json_btn",
+                use_container_width=True,
+            )
+
+    with tab_ent:
+        st.markdown("#### 📈 Sliding-Window Shannon Entropy Profile")
+        st.markdown(
+            "File encryption causes byte randomness near 8.0 bits/byte. "
+            "Our sliding-window analyzer computes granular entropy across file blocks to detect packed code and encrypted payloads."
+        )
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Overall Entropy", f"{entropy_res['overall_entropy']:.2f} / 8.0")
+        e2.metric("Peak Block Entropy", f"{entropy_res['max_block_entropy']:.2f}")
+        e3.metric("High Entropy Blocks", f"{entropy_res['high_entropy_ratio']:.1f}%")
+        verdict_str = entropy_res['packing_verdict']
+        e4.metric("Packing Verdict", verdict_str.replace("_", " "))
+
+        fig_entropy = create_entropy_profile_chart(entropy_res, file_name=file_name)
+        st.plotly_chart(fig_entropy, use_container_width=True)
+
+    with tab_ti:
+        st.markdown("#### 🌐 Threat Intelligence Enrichment (VT / MalwareBazaar / AbuseIPDB)")
+        t_card_color = "#ef4444" if threat_intel.get("threat_level") in ["CRITICAL", "HIGH"] else "#10b981"
+        st.markdown(
+            f"""
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid {t_card_color}; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                    <div>
+                        <h4 style="color: #f8fafc; margin: 0;">Threat Family: <span style="color: {t_card_color};">{threat_intel.get('family', 'Unclassified')}</span></h4>
+                        <p style="color: #94a3b8; font-size: 0.88rem; margin: 4px 0 0 0;">Category: <b>{threat_intel.get('category')}</b> &nbsp;|&nbsp; Feed Source: <code>{threat_intel.get('source')}</code></p>
+                    </div>
+                    <div>
+                        <span style="background: {t_card_color}; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;">
+                            {threat_intel.get('positives', 0)} / {threat_intel.get('total', 0)} AV Engines Flagged
+                        </span>
+                    </div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <span style="color: #94a3b8; font-size: 0.85rem;">Tags:</span> {", ".join([f"<code>#{t}</code>" for t in threat_intel.get('tags', [])]) or 'None'}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if iocs["network"]["ipv4"]:
+            st.markdown("##### 🌐 Network IP Reputation Check")
+            for ip in iocs["network"]["ipv4"][:3]:
+                ip_data = query_ip_reputation(ip)
+                st.write(f"- IP `{ip}`: Reputation `{ip_data['reputation']}` | Abuse Score: `{ip_data['abuse_score']}%` | Source: `{ip_data['source']}`")
+
+    with tab_hyb:
+        st.markdown("#### 🛡️ Multi-Engine Hybrid Fusion (ML + YARA + Sigma)")
+        st.markdown("Fusing deep neural behavioral evaluation with signature YARA and behavioral Sigma rules.")
+
+        h1, h2, h3, h4 = st.columns(4)
+        h1.metric("Neural Network Score (50%)", f"{fused['ml_probability']:.1f}%")
+        h2.metric("YARA Rules Score (30%)", f"{fused['yara_score']:.1f}%", f"{fused['yara_match_count']} rules")
+        h3.metric("Sigma Rules Score (20%)", f"{fused['sigma_score']:.1f}%", f"{fused['sigma_match_count']} rules")
+        h4.metric("Composite Fused Score", f"{fused['fused_score']:.1f}%", fused['severity_tier'])
+
+        tier = fused["severity_tier"]
+        playbook_map = {
+            "CRITICAL": (
+                "🚨 CRITICAL SEVERITY INCIDENT RESPONSE PLAYBOOK",
+                "#ef4444",
+                [
+                    "1. Immediately isolate host network interface to prevent lateral SMB/WMI spread.",
+                    "2. Force-terminate culprit process tree via EDR agent.",
+                    "3. Snapshot volume shadow copies and verify immutability of offline backups.",
+                    "4. Dispatch forensic alert to SOC Incident Commander.",
+                ]
+            ),
+            "HIGH": (
+                "⚠️ HIGH SEVERITY MITIGATION PLAYBOOK",
+                "#f97316",
+                [
+                    "1. Quarantine suspect executable and child processes into read-only isolation mode (0400).",
+                    "2. Inspect parent process lineage and block command-line scripts.",
+                    "3. Enable heightened write-rate telemetry capture on surrounding endpoints.",
+                ]
+            ),
+            "MEDIUM": (
+                "🟡 MEDIUM SEVERITY INVESTIGATION PLAYBOOK",
+                "#f59e0b",
+                [
+                    "1. Inspect file modification timestamps and target directory paths.",
+                    "2. Correlate with user identity and scheduled background tasks.",
+                    "3. Keep system in continuous behavioral monitoring mode.",
+                ]
+            ),
+            "LOW": (
+                "🟢 NOMINAL / LOW SEVERITY BASELINE",
+                "#10b981",
+                [
+                    "1. No containment required. Workload matches benign enterprise baseline.",
+                    "2. Operational metrics archived in local telemetry log for compliance.",
+                ]
+            ),
+        }
+        pb_title, pb_color, pb_steps = playbook_map.get(tier, playbook_map["LOW"])
+        st.markdown(
+            f"""
+            <div style="background: rgba(15, 23, 42, 0.8); border: 2px solid {pb_color}; border-radius: 8px; padding: 14px; margin-top: 14px;">
+                <h4 style="color: {pb_color}; margin: 0 0 8px 0;">{pb_title}</h4>
+                <ul style="color: #f1f5f9; margin: 0; padding-left: 20px; font-size: 0.93rem; line-height: 1.6;">
+                    {"".join([f"<li>{s}</li>" for s in pb_steps])}
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if yara_hits or sigma_hits:
+            with st.expander("🔍 Matched YARA & Sigma Rule Signatures", expanded=True):
+                for y in yara_hits:
+                    st.markdown(f"- 🏷️ **YARA:** `{y['rule_id']}` ({y['rule_name']}) — Severity: `{y['severity']}`")
+                for s in sigma_hits:
+                    st.markdown(f"- 📋 **Sigma:** `{s['rule_id']}` ({s['title']}) — MITRE: `{s['mitre_id']}`")
+
+    with tab_pdf:
+        st.markdown("#### 📄 Automated SOC Incident Response PDF Report")
+        st.markdown("Generate a publication-quality digital forensic incident report in one click.")
+
+        inc_id = f"INC-{hashlib.md5((file_name + str(time.time())).encode()).hexdigest()[:8].upper()}"
+        gen_pdf_btn = st.button("⚡ Compile Incident Report", key=f"{prefix_key}_gen_pdf")
+
+        if gen_pdf_btn or f"{prefix_key}_cached_pdf" in st.session_state:
+            if gen_pdf_btn or f"{prefix_key}_cached_pdf" not in st.session_state:
+                with st.spinner("Compiling forensic sections into ReportLab PDF..."):
+                    pdf_bytes = generate_pdf_incident_report(
+                        incident_id=inc_id,
+                        threat_verdict=fused["severity_tier"],
+                        probability=fused["fused_score"],
+                        mitre_techniques=mitre_techs,
+                        top_features=explain_res["top_features"] if explain_res else [],
+                        iocs=iocs,
+                        culprit_process=telemetry_meta.get("culprit_process") if telemetry_meta else None,
+                    )
+                    st.session_state[f"{prefix_key}_cached_pdf"] = pdf_bytes
+                    st.session_state[f"{prefix_key}_inc_id"] = inc_id
+
+            pdf_data = st.session_state[f"{prefix_key}_cached_pdf"]
+            stored_id = st.session_state.get(f"{prefix_key}_inc_id", inc_id)
+            st.success(f"✅ Incident Report `{stored_id}` Compiled Successfully ({len(pdf_data):,} bytes)")
+            st.download_button(
+                label="📥 Download Formal PDF Report",
+                data=pdf_data,
+                file_name=f"{stored_id}_{file_name}.pdf",
+                mime="application/pdf",
+                key=f"{prefix_key}_dl_pdf",
+                use_container_width=True,
+            )
+
+    with tab_feed:
+        st.markdown("#### 👍 Human-in-the-Loop Analyst Verification & Drift Audit")
+        st.markdown("Empower SOC tier-2/3 analysts to validate model inferences and log corrections for continuous retraining.")
+
+        f_col1, f_col2, f_col3 = st.columns(3)
+        with f_col1:
+            if st.button("👍 Confirm Ransomware Detection", key=f"{prefix_key}_fb_corr", use_container_width=True):
+                res_fb = record_analyst_feedback(file_name, prob_pct, "CORRECT", reason_tag="Analyst Verified Attack")
+                st.success(f"Feedback Logged: Validated as TRUE POSITIVE. Total feedback entries: {res_fb['total_feedback_entries']}")
+        with f_col2:
+            if st.button("👎 Report False Positive", key=f"{prefix_key}_fb_fp", use_container_width=True):
+                res_fb = record_analyst_feedback(file_name, prob_pct, "FALSE_POSITIVE", reason_tag="Benign Routine Workload")
+                st.warning(f"Feedback Logged: Flagged as FALSE POSITIVE for retraining. Total entries: {res_fb['total_feedback_entries']}")
+        with f_col3:
+            if st.button("⚠️ Flag Stealthy False Negative", key=f"{prefix_key}_fb_fn", use_container_width=True):
+                res_fb = record_analyst_feedback(file_name, prob_pct, "FALSE_NEGATIVE", reason_tag="Stealthy Variant Missed")
+                st.error("Feedback Logged: Flagged as FALSE NEGATIVE. Added to active learning queue.")
+
+        st.caption("All feedback and prediction audit records are stored locally on localhost in `data/model_monitoring/`.")
+
+
+def render_batch_triage_page():
+    st.markdown(
+        """
+        <div class='main-header'>
+            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>📦 Batch File & Telemetry Triage Center</h1>
+            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
+                High-Throughput Concurrent Multi-File Ingestion, Telemetry Dump Processing, and Priority Queue Ranking
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        "Upload a batch of suspicious files, endpoint execution logs (.csv), or a compressed `.zip` archive. "
+        "The triage engine processes all items in parallel, ranks them by threat score, and generates a SOC priority queue."
+    )
+
+    col_b1, col_b2 = st.columns([3, 1])
+    with col_b1:
+        uploaded_files = st.file_uploader(
+            "Upload files or ZIP archive for batch analysis",
+            accept_multiple_files=True,
+            key="analyst_batch_uploader",
+        )
+    with col_b2:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        load_demo_batch = st.button("⚡ Load Batch Demo (5 Samples)", key="analyst_batch_demo")
+
+    batch_data = []
+    if uploaded_files:
+        for f in uploaded_files:
+            batch_data.append((f.name, f.read()))
+    elif load_demo_batch or st.session_state.get("batch_demo_active"):
+        st.session_state["batch_demo_active"] = True
+        if SAMPLE_RANSOMWARE_PATH.exists():
+            batch_data.append(("endpoint_telemetry_ransomware.csv", SAMPLE_RANSOMWARE_PATH.read_bytes()))
+        if SAMPLE_BENIGN_PATH.exists():
+            batch_data.append(("endpoint_telemetry_benign.csv", SAMPLE_BENIGN_PATH.read_bytes()))
+        batch_data.append(("README_TO_DECRYPT_FILES.txt", b"ALL YOUR FILES ARE ENCRYPTED! Send 0.5 btc to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa or files will be lost."))
+        batch_data.append(("standard_test_sample.com", b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"))
+        batch_data.append(("system_backup_maintenance.py", b"import shutil\nprint('Running daily backup routine')\nshutil.copytree('/docs', '/backup')\n"))
+
+    if batch_data:
+        with st.spinner(f"Analyzing {len(batch_data)} items through hybrid triage engine..."):
+            batch_res = process_batch_files(batch_data)
+
+        st.markdown("### 📊 Batch Triage Summary Metrics")
+        b1, b2, b3, b4 = st.columns(4)
+        b1.metric("Total Items Triaged", f"{batch_res['total_files']}")
+        b2.metric("Critical Threats", f"{batch_res['critical_count']}", delta_color="inverse")
+        b3.metric("High Threats", f"{batch_res['high_count']}", delta_color="inverse")
+        b4.metric("Low / Benign", f"{batch_res['low_count']}")
+
+        st.markdown("### 📋 Prioritized SOC Triage Queue")
+        df_summary = batch_res["summary_table"]
+        st.dataframe(df_summary, use_container_width=True)
+
+        csv_batch_summary = df_summary.to_csv(index=False)
+        st.download_button(
+            "📥 Download Batch Triage Summary (CSV)",
+            data=csv_batch_summary,
+            file_name="soc_batch_triage_summary.csv",
+            mime="text/csv",
+            key="analyst_batch_triage_csv_dl",
+        )
+
+        if not df_summary.empty:
+            sev_counts = df_summary["severity"].value_counts().reset_index()
+            sev_counts.columns = ["Severity", "Count"]
+            color_map = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#f59e0b", "LOW": "#10b981"}
+            fig_bar = px.bar(
+                sev_counts,
+                x="Severity",
+                y="Count",
+                color="Severity",
+                color_discrete_map=color_map,
+                title="Severity Tier Distribution Across Ingested Batch",
+                template="plotly_dark",
+                height=320,
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+
+def render_model_monitoring_page():
+    st.markdown(
+        """
+        <div class='main-header'>
+            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>📊 Model Monitoring & Concept Drift Tracker</h1>
+            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
+                Continuous Ingestion Tracking, Rolling Distribution Shift Detection, and Human-in-the-Loop Active Retraining
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    metrics = get_drift_and_monitoring_metrics()
+
+    drift_status = metrics.get("drift_status", "STABLE_NOMINAL_BASELINE")
+    drift_color = "#ef4444" if "ALERT" in drift_status else ("#f59e0b" if "MODERATE" in drift_status else "#10b981")
+
+    st.markdown(
+        f"""
+        <div style="background: rgba(15, 23, 42, 0.7); border: 2px solid {drift_color}; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div>
+                    <span style="background: {drift_color}; color: #ffffff; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.85rem;">
+                        CONCEPT DRIFT MONITOR
+                    </span>
+                    <h3 style="color: #f8fafc; margin: 10px 0 0 0; font-size: 1.35rem;">
+                        Status: <span style="color: {drift_color};">{drift_status.replace('_', ' ')}</span>
+                    </h3>
+                </div>
+                <div style="text-align: right; margin-top: 6px;">
+                    <span style="color: #94a3b8; font-size: 0.85rem;">Audit Storage Directory:</span><br>
+                    <code style="color: #60a5fa;">data/model_monitoring/</code>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Model Inferences Logged", f"{metrics.get('total_predictions', 0)}")
+    m2.metric("Rolling Mean Probability", f"{metrics.get('rolling_mean_probability', 0.0):.2f}%")
+    m3.metric("Analyst Reviews / Retrain Queue", f"{metrics.get('retraining_queue_size', 0)}")
+    m4.metric("False Positives Flagged", f"{metrics.get('false_positive_count', 0)}")
+
+    col_act1, col_act2 = st.columns([1, 1])
+    with col_act1:
+        if st.button("🧪 Simulate Telemetry Ingestion Audit Event", use_container_width=True):
+            import random
+            sim_p = random.uniform(0.01, 0.99)
+            sim_r = "HIGH" if sim_p >= 0.70 else ("MEDIUM" if sim_p >= 0.30 else "LOW")
+            record_prediction_audit(
+                sample_id=f"sim_sample_{random.randint(100, 999)}",
+                probability=sim_p,
+                risk_level=sim_r,
+                top_feature="entropy_delta" if sim_p >= 0.50 else "cpu_percent",
+            )
+            st.success("New audit event logged to `data/model_monitoring/prediction_audit.jsonl`.")
+            st.rerun()
+
+    with col_act2:
+        if st.button("🧹 Clear Monitoring & Drift Logs", use_container_width=True):
+            from src.model_monitoring import AUDIT_LOG_FILE, FEEDBACK_LOG_FILE
+            if AUDIT_LOG_FILE.exists():
+                AUDIT_LOG_FILE.write_text("")
+            if FEEDBACK_LOG_FILE.exists():
+                FEEDBACK_LOG_FILE.write_text("[]")
+            st.success("Monitoring logs cleared.")
+            st.rerun()
+
+    tab_rec1, tab_rec2 = st.tabs(["📜 Recent Model Prediction Audit Log", "👥 Human-in-the-Loop Analyst Feedback"])
+    with tab_rec1:
+        recent_records = metrics.get("recent_audit_records", [])
+        if recent_records:
+            st.dataframe(pd.DataFrame(recent_records), use_container_width=True)
+        else:
+            st.info("No prediction audits recorded yet. Run Live Detection or inspect files to populate audit trails.")
+
+    with tab_rec2:
+        from src.model_monitoring import FEEDBACK_LOG_FILE
+        if FEEDBACK_LOG_FILE.exists():
+            try:
+                with open(FEEDBACK_LOG_FILE, "r", encoding="utf-8") as f:
+                    fb_data = json.load(f)
+                if fb_data:
+                    st.dataframe(pd.DataFrame(fb_data), use_container_width=True)
+                else:
+                    st.info("No analyst feedback submitted yet.")
+            except Exception as e:
+                st.warning(f"Could not read feedback log: {e}")
+        else:
+            st.info("No analyst feedback submitted yet.")
+
+
 def render_public_mode():
     st.markdown(
         """
@@ -468,9 +1028,10 @@ def render_public_mode():
         unsafe_allow_html=True,
     )
 
-    pub_tab1, pub_tab2 = st.tabs([
+    pub_tab1, pub_tab2, pub_tab3 = st.tabs([
         "🔍 Suspicious File Scanner (Zero Execution)",
-        "🛡️ Live System Shield & Threat Monitor (Localhost)"
+        "🛡️ Live System Shield & Threat Monitor (Localhost)",
+        "📦 Batch File & Telemetry Triage",
     ])
     
     with pub_tab1:
@@ -592,6 +1153,20 @@ def render_public_mode():
                     """,
                     unsafe_allow_html=True
                 )
+
+                # Extended SOC Forensic & Intelligence Suite
+                csv_df_ref = csv_df if is_csv else None
+                calc_prob = prob if is_csv else float(risk_score)
+                calc_risk = risk if is_csv else ("CRITICAL" if risk_score >= 80 else ("HIGH" if risk_score >= 50 else ("MEDIUM" if risk_score >= 20 else "LOW")))
+                render_soc_extended_analysis_tabs(
+                    file_bytes=file_bytes,
+                    file_name=uploaded_file.name,
+                    probability=calc_prob,
+                    risk_level=calc_risk,
+                    input_df=csv_df_ref,
+                    static_res=res,
+                    prefix_key="pub_scanner",
+                )
     
     with pub_tab2:
         st.markdown("### 🛡️ Live System Shield & Threat Monitor (Localhost)")
@@ -673,6 +1248,78 @@ def render_public_mode():
                 st.rerun()
 
         render_live_shield_public_fragment(monitor)
+
+    with pub_tab3:
+        st.markdown("### 📦 Batch File & Telemetry Triage Center")
+        st.markdown(
+            "Upload a batch of suspicious files, endpoint execution logs (.csv), or a compressed `.zip` archive. "
+            "The triage engine processes all items in parallel, ranks them by threat score, and generates a SOC priority queue."
+        )
+
+        col_b1, col_b2 = st.columns([3, 1])
+        with col_b1:
+            uploaded_batch = st.file_uploader(
+                "Upload multiple files or ZIP archive",
+                accept_multiple_files=True,
+                key="pub_batch_uploader",
+            )
+        with col_b2:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            load_demo_batch = st.button("⚡ Load Batch Demo (5 Samples)", key="pub_demo_batch")
+
+        batch_data = []
+        if uploaded_batch:
+            for f in uploaded_batch:
+                batch_data.append((f.name, f.read()))
+        elif load_demo_batch or st.session_state.get("pub_batch_demo_active"):
+            st.session_state["pub_batch_demo_active"] = True
+            if SAMPLE_RANSOMWARE_PATH.exists():
+                batch_data.append(("endpoint_telemetry_ransomware.csv", SAMPLE_RANSOMWARE_PATH.read_bytes()))
+            if SAMPLE_BENIGN_PATH.exists():
+                batch_data.append(("endpoint_telemetry_benign.csv", SAMPLE_BENIGN_PATH.read_bytes()))
+            batch_data.append(("README_TO_DECRYPT_FILES.txt", b"ALL YOUR FILES ARE ENCRYPTED! Send 0.5 btc to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa or files will be lost."))
+            batch_data.append(("standard_test_sample.com", b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"))
+            batch_data.append(("system_backup_maintenance.py", b"import shutil\nprint('Running daily backup routine')\nshutil.copytree('/docs', '/backup')\n"))
+
+        if batch_data:
+            with st.spinner(f"Analyzing {len(batch_data)} items through hybrid triage engine..."):
+                batch_res = process_batch_files(batch_data)
+
+            st.markdown("### 📊 Batch Triage Summary Metrics")
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric("Total Items Triaged", f"{batch_res['total_files']}")
+            b2.metric("Critical Threats", f"{batch_res['critical_count']}", delta_color="inverse")
+            b3.metric("High Threats", f"{batch_res['high_count']}", delta_color="inverse")
+            b4.metric("Low / Benign", f"{batch_res['low_count']}")
+
+            st.markdown("### 📋 Prioritized SOC Triage Queue")
+            df_summary = batch_res["summary_table"]
+            st.dataframe(df_summary, use_container_width=True)
+
+            csv_batch_summary = df_summary.to_csv(index=False)
+            st.download_button(
+                "📥 Download Batch Triage Summary (CSV)",
+                data=csv_batch_summary,
+                file_name="soc_batch_triage_summary.csv",
+                mime="text/csv",
+                key="pub_batch_triage_csv_dl",
+            )
+
+            if not df_summary.empty:
+                sev_counts = df_summary["severity"].value_counts().reset_index()
+                sev_counts.columns = ["Severity", "Count"]
+                color_map = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#f59e0b", "LOW": "#10b981"}
+                fig_bar = px.bar(
+                    sev_counts,
+                    x="Severity",
+                    y="Count",
+                    color="Severity",
+                    color_discrete_map=color_map,
+                    title="Severity Tier Distribution Across Ingested Batch",
+                    template="plotly_dark",
+                    height=320,
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
 
 
 def render_endpoint_edr_page():
@@ -958,6 +1605,14 @@ if nav_page == "Live Endpoint Telemetry & EDR":
 
 if nav_page == "Scientific Validation & Audit":
     render_scientific_audit_page()
+    st.stop()
+
+if nav_page == "📦 Batch Telemetry Triage":
+    render_batch_triage_page()
+    st.stop()
+
+if nav_page == "📊 Model Drift & Monitoring":
+    render_model_monitoring_page()
     st.stop()
 
 
@@ -1312,6 +1967,22 @@ elif nav_page == "Live Detection":
             st.caption(
                 "Attention weights indicate which timesteps received greater weight from the model. "
                 "They should not be interpreted as definitive causal explanations."
+            )
+
+            # Extended SOC Forensic & Intelligence Suite
+            raw_csv_bytes = input_df.to_csv(index=False).encode("utf-8")
+            render_soc_extended_analysis_tabs(
+                file_bytes=raw_csv_bytes,
+                file_name=st.session_state.get("sample_name", "Uploaded_Telemetry.csv"),
+                probability=result["ransomware_probability"],
+                risk_level=result["risk_level"],
+                input_df=input_df,
+                telemetry_meta={
+                    "entropy_delta": float(seq_df["entropy_delta"].iloc[-1]),
+                    "file_write_rate": float(seq_df["file_write_rate"].iloc[-1]),
+                    "shadow_cmd": float(seq_df["shadow_copy_cmd_count"].iloc[-1]) if "shadow_copy_cmd_count" in seq_df.columns else 0.0,
+                },
+                prefix_key="analyst_live_det",
             )
 
         except Exception as err:
