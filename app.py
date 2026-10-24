@@ -6,9 +6,17 @@ Ablation Studies, Threshold Analysis, Attention Weights, and Academic Documentat
 
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional, Dict, Any, List, Tuple
+import os
+import sys
+import io
 import json
 import time
+import uuid
+import random
+import hashlib
 import psutil
+import torch
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -52,7 +60,13 @@ from src.ioc_extractor import extract_iocs_from_data, export_iocs_to_stix, expor
 from src.threat_intel import query_threat_intel_hash, query_ip_reputation
 from src.entropy_analyzer import compute_sliding_block_entropy, create_entropy_profile_chart
 from src.report_generator import generate_pdf_incident_report
-from src.model_monitoring import record_prediction_audit, record_analyst_feedback, get_drift_and_monitoring_metrics
+from src.model_monitoring import (
+    record_prediction_audit,
+    record_analyst_feedback,
+    get_drift_and_monitoring_metrics,
+    AUDIT_LOG_FILE,
+    FEEDBACK_LOG_FILE,
+)
 from src.hybrid_rules import scan_with_yara_rules, scan_with_sigma_rules, compute_hybrid_fused_score
 from src.batch_analyzer import process_batch_files
 
@@ -983,7 +997,6 @@ def render_model_monitoring_page():
 
     with col_act2:
         if st.button("🧹 Clear Monitoring & Drift Logs", use_container_width=True):
-            from src.model_monitoring import AUDIT_LOG_FILE, FEEDBACK_LOG_FILE
             if AUDIT_LOG_FILE.exists():
                 AUDIT_LOG_FILE.write_text("")
             if FEEDBACK_LOG_FILE.exists():
@@ -1000,7 +1013,6 @@ def render_model_monitoring_page():
             st.info("No prediction audits recorded yet. Run Live Detection or inspect files to populate audit trails.")
 
     with tab_rec2:
-        from src.model_monitoring import FEEDBACK_LOG_FILE
         if FEEDBACK_LOG_FILE.exists():
             try:
                 with open(FEEDBACK_LOG_FILE, "r", encoding="utf-8") as f:
@@ -1056,7 +1068,6 @@ def render_public_mode():
                 if is_csv:
                     st.info("📊 **Detected Behavioral Activity Log (`.csv`):** Analyzing sequence with Hybrid Deep Learning Model (CNN + BiLSTM + Attention)...")
                     try:
-                        import io
                         csv_df = pd.read_csv(io.BytesIO(file_bytes))
                         csv_res = predict_csv(csv_df)
                         prob = csv_res["ransomware_probability"]
