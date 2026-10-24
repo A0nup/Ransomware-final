@@ -165,3 +165,4 @@ def query_ip_reputation(ip_address: str, abuse_api_key: Optional[str] = None) ->
         "category": "Public Unflagged",
         "source": "Local Network Heuristic",
     }
+

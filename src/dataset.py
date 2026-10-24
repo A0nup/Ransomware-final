@@ -1,6 +1,8 @@
 """
 Synthetic Behavioral Telemetry Dataset Generator & Validator
 Simulates endpoint telemetry for benign and ransomware-like processes.
+Features dynamic, non-deterministic phase transitions, heterogeneous host profiles,
+and realistic enterprise workload telemetry with continuous distribution overlaps.
 No malicious code or destructive operations are executed.
 """
 
@@ -49,86 +51,117 @@ def generate_benign_sequence(
     """
     Generate a 20-step behavioral telemetry sequence for benign operations.
     Includes realistic everyday usage, developer compilation bursts, software
-    installers, and backup maintenance tasks with realistic overlapping features.
+    installers, backup maintenance, and media processing with continuous
+    feature distribution overlap against ransomware patterns.
     """
     seq_data = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
 
-    # Workload profile: 78% standard, 16% heavy compiler/installer, 6% admin backup
-    workload = np.random.choice(["standard", "heavy_build", "admin_backup"], p=[0.78, 0.16, 0.06])
-    burst_start = np.random.randint(4, 10) if workload != "standard" else 999
+    # Workload archetypes: 35% desktop, 30% compiler builds, 20% backup archives, 15% media renamers
+    workload = np.random.choice(["desktop", "heavy_build", "backup_archive", "media_rename"], p=[0.35, 0.30, 0.20, 0.15])
+    burst_start = np.random.randint(2, 9) if workload != "desktop" else 99
+    burst_len = np.random.randint(6, 16)
+    burst_end = burst_start + burst_len
+
+    base_cpu = host_profile["base_cpu"]
+    base_mem = host_profile["base_mem"]
+    base_net = host_profile["base_net"]
 
     for t in range(SEQ_LEN):
         noise = np.random.normal(0.0, 0.5)
-        active = t >= burst_start
+        active = (burst_start <= t < burst_end)
 
-        if workload == "heavy_build" and active:
-            # Software compilation, package managers (npm, pip, cargo), temp caches
-            write_rate = np.random.uniform(35.0, 150.0) + max(0.0, noise * 2)
-            rename_rate = np.random.uniform(8.0, 52.0) # .tmp -> .obj -> .dll renames
-            delete_rate = np.random.uniform(4.0, 24.0) # cache cleanup
-            entropy_delta = np.random.uniform(0.12, 0.58) # compiled binaries / asset zips
-            ext_change_rate = np.random.uniform(6.0, 38.0)
-            proc_create = np.random.poisson(lam=2.5)
+        if workload == "backup_archive":
+            # Legitimate backup (7-Zip, Borg, Veeam, Windows Backup): high entropy compression, VSS snapshot
+            write_rate = np.random.uniform(70.0, 195.0) if active else np.random.uniform(5.0, 20.0)
+            rename_rate = np.random.uniform(10.0, 45.0) if active else np.random.uniform(0.0, 2.0)
+            delete_rate = np.random.uniform(2.0, 12.0) if active else 0.0
+            entropy_delta = np.random.uniform(0.85, 2.05) if active else np.random.normal(0.02, 0.04)
+            ext_change_rate = np.random.uniform(8.0, 38.0) if active else 0.0
+            proc_create = np.random.uniform(2.0, 5.0) if active else 1.0
+            shadow_cmd = 1 if (active and t in [burst_start, burst_start + 1] and np.random.rand() < 0.35) else 0
+            backup_del = 1 if (active and t in [burst_start + 1, burst_start + 2] and np.random.rand() < 0.20) else 0
+            cpu = np.clip(base_cpu + (np.random.uniform(30.0, 60.0) if active else 4.0), 5.0, 95.0)
+            mem = np.clip(base_mem + (np.random.uniform(20.0, 42.0) if active else 4.0), 10.0, 95.0)
+            net_conn = base_net + np.random.uniform(10.0, 32.0)
+            file_open = np.random.uniform(75.0, 240.0) if active else 18.0
+            dir_traversal = np.random.uniform(35.0, 90.0) if active else 12.0
+            suspicious_api = np.random.uniform(3.5, 9.5) if active else 1.5
+            unique_ext = np.random.randint(10, 25) if active else 4
+            enc_ratio = np.random.uniform(0.20, 0.70) if active else 0.0
+            failed_access = np.random.choice([0, 1, 2, 4], p=[0.45, 0.35, 0.15, 0.05])
+            admin_act = 1 if (active and np.random.rand() < 0.65) else 0
+            bytes_mb = np.random.uniform(30.0, 115.0) if active else 2.0
+            unknown_proc = np.random.choice([0, 1, 2], p=[0.45, 0.40, 0.15])
+
+        elif workload == "heavy_build":
+            # Software compilation (npm, cargo, gcc, maven): high renames, temp files, directory traversal
+            write_rate = np.random.uniform(45.0, 155.0) if active else np.random.uniform(5.0, 18.0)
+            rename_rate = np.random.uniform(20.0, 75.0) if active else 0.0
+            delete_rate = np.random.uniform(4.0, 25.0) if active else 0.0
+            entropy_delta = np.random.uniform(0.25, 0.85) if active else np.random.normal(0.02, 0.04)
+            ext_change_rate = np.random.uniform(14.0, 65.0) if active else 0.0
+            proc_create = np.random.uniform(3.0, 7.0) if active else 1.0
             shadow_cmd = 0
             backup_del = 0
-            cpu = np.clip(host_profile["base_cpu"] + np.random.uniform(35.0, 68.0), 30.0, 96.0)
-            mem = np.clip(host_profile["base_mem"] + np.random.uniform(15.0, 35.0), 35.0, 92.0)
-            net_conn = host_profile["base_net"] + np.random.uniform(8.0, 28.0)
-            file_open = write_rate * np.random.uniform(1.3, 2.2)
-            dir_traversal = np.random.uniform(25.0, 75.0) # project tree search
-            suspicious_api = np.random.choice([0, 1, 2], p=[0.75, 0.20, 0.05])
-            unique_ext = np.random.randint(6, 18)
-            enc_ratio = np.random.uniform(0.03, 0.25)
-            failed_access = np.random.randint(1, 6) # locked build locks
-            admin_act = np.random.choice([0, 1], p=[0.85, 0.15])
-            bytes_mb = np.random.uniform(15.0, 75.0)
-            unknown_proc = np.random.choice([0, 1, 2], p=[0.70, 0.25, 0.05])
+            cpu = np.clip(base_cpu + (np.random.uniform(35.0, 70.0) if active else 5.0), 5.0, 96.0)
+            mem = np.clip(base_mem + (np.random.uniform(18.0, 38.0) if active else 5.0), 10.0, 95.0)
+            net_conn = base_net + np.random.uniform(5.0, 25.0)
+            file_open = np.random.uniform(55.0, 210.0) if active else 15.0
+            dir_traversal = np.random.uniform(35.0, 92.0) if active else 10.0
+            suspicious_api = np.random.uniform(3.0, 8.5) if active else 1.4
+            unique_ext = np.random.randint(8, 25) if active else 3
+            enc_ratio = np.random.uniform(0.02, 0.22) if active else 0.0
+            failed_access = np.random.choice([0, 1, 3, 5], p=[0.45, 0.35, 0.15, 0.05])
+            admin_act = 1 if (active and np.random.rand() < 0.25) else 0
+            bytes_mb = np.random.uniform(18.0, 80.0) if active else 1.8
+            unknown_proc = np.random.choice([0, 1, 2], p=[0.30, 0.50, 0.20])
 
-        elif workload == "admin_backup" and active:
-            # Authorized IT backup / disk maintenance / system archive
-            write_rate = np.random.uniform(45.0, 165.0) + max(0.0, noise * 3)
-            rename_rate = np.random.uniform(5.0, 30.0)
-            delete_rate = np.random.uniform(3.0, 18.0)
-            entropy_delta = np.random.uniform(0.25, 0.75) # encrypted/compressed backup
-            ext_change_rate = np.random.uniform(4.0, 22.0)
-            proc_create = np.random.poisson(lam=1.8)
-            shadow_cmd = np.random.choice([0, 1, 2], p=[0.70, 0.22, 0.08]) # VSS maintenance
-            backup_del = np.random.choice([0, 1], p=[0.85, 0.15]) # backup rotation pruning
-            cpu = np.clip(host_profile["base_cpu"] + np.random.uniform(30.0, 60.0), 25.0, 92.0)
-            mem = np.clip(host_profile["base_mem"] + np.random.uniform(18.0, 38.0), 30.0, 90.0)
-            net_conn = host_profile["base_net"] + np.random.uniform(12.0, 35.0) # network backup
-            file_open = write_rate * np.random.uniform(1.2, 2.0)
-            dir_traversal = np.random.uniform(30.0, 85.0) # full disk traverse
-            suspicious_api = np.random.choice([1, 2, 4], p=[0.60, 0.30, 0.10])
-            unique_ext = np.random.randint(8, 20)
-            enc_ratio = np.random.uniform(0.15, 0.48) # compressed archive ratio
-            failed_access = np.random.randint(1, 7)
-            admin_act = np.random.choice([1, 2], p=[0.60, 0.40])
-            bytes_mb = np.random.uniform(25.0, 95.0)
-            unknown_proc = np.random.choice([0, 1], p=[0.80, 0.20])
+        elif workload == "media_rename":
+            # Photo/music organizer, tagger: mass renames, ext changes, compressed media entropy
+            write_rate = np.random.uniform(50.0, 135.0) if active else np.random.uniform(4.0, 18.0)
+            rename_rate = np.random.uniform(35.0, 95.0) if active else np.random.uniform(0.0, 3.0)
+            delete_rate = np.random.uniform(1.0, 8.0) if active else 0.0
+            entropy_delta = np.random.uniform(0.65, 1.50) if active else np.random.normal(0.03, 0.04)
+            ext_change_rate = np.random.uniform(28.0, 88.0) if active else 0.0
+            proc_create = np.random.uniform(1.2, 3.5)
+            shadow_cmd = 0
+            backup_del = 0
+            cpu = np.clip(base_cpu + (np.random.uniform(20.0, 50.0) if active else 4.0), 5.0, 90.0)
+            mem = np.clip(base_mem + 15.0, 10.0, 90.0)
+            net_conn = base_net + 5.0
+            file_open = np.random.uniform(50.0, 165.0) if active else 12.0
+            dir_traversal = np.random.uniform(28.0, 80.0) if active else 8.0
+            suspicious_api = np.random.uniform(2.5, 6.8) if active else 1.3
+            unique_ext = np.random.randint(10, 24) if active else 3
+            enc_ratio = np.random.uniform(0.06, 0.32) if active else 0.0
+            fail = np.random.choice([0, 1, 2], p=[0.75, 0.20, 0.05])
+            admin_act = 0
+            bytes_mb = np.random.uniform(22.0, 80.0) if active else 1.5
+            unknown_proc = np.random.choice([0, 1], p=[0.75, 0.25])
+            failed_access = fail
 
         else:
             # Everyday benign desktop workload (browsing, office, streaming)
-            write_rate = np.random.uniform(1.0, 18.0) + max(0.0, noise)
-            rename_rate = np.random.choice([0, 1, 2], p=[0.78, 0.18, 0.04])
-            delete_rate = np.random.choice([0, 1, 2, 3], p=[0.72, 0.18, 0.07, 0.03])
+            write_rate = np.random.uniform(2.0, 22.0) + max(0.0, noise)
+            rename_rate = np.random.choice([0, 1, 2], p=[0.72, 0.22, 0.06])
+            delete_rate = np.random.choice([0, 1], p=[0.82, 0.18])
             entropy_delta = np.random.normal(0.01, 0.04)
             ext_change_rate = 0.0
             proc_create = np.random.poisson(lam=1.2)
-            shadow_cmd = 1 if np.random.rand() < 0.005 else 0
+            shadow_cmd = 0
             backup_del = 0
-            cpu = np.clip(host_profile["base_cpu"] + np.random.uniform(0.0, 15.0) + np.random.normal(0, 2), 1.0, 85.0)
-            mem = np.clip(host_profile["base_mem"] + np.random.uniform(-3.0, 6.0), 10.0, 85.0)
-            net_conn = np.clip(host_profile["base_net"] + np.random.uniform(0.0, 12.0), 0.0, 80.0)
-            file_open = write_rate * np.random.uniform(1.2, 2.4) + np.random.uniform(2.0, 8.0)
-            dir_traversal = np.random.uniform(0.5, 9.0)
-            suspicious_api = np.random.choice([0, 1], p=[0.95, 0.05])
+            cpu = np.clip(base_cpu + np.random.uniform(0.0, 12.0), 2.0, 80.0)
+            mem = np.clip(base_mem + np.random.uniform(-2.0, 4.0), 5.0, 80.0)
+            net_conn = base_net + np.random.uniform(0.0, 10.0)
+            file_open = np.random.uniform(5.0, 32.0)
+            dir_traversal = np.random.uniform(2.0, 14.0)
+            suspicious_api = np.random.uniform(0.6, 2.6)
             unique_ext = np.random.randint(1, 6)
-            enc_ratio = np.random.uniform(0.0, 0.04)
-            failed_access = np.random.choice([0, 1, 2], p=[0.84, 0.13, 0.03])
-            admin_act = np.random.choice([0, 1], p=[0.95, 0.05])
-            bytes_mb = np.random.uniform(0.1, 4.5)
-            unknown_proc = np.random.choice([0, 1], p=[0.96, 0.04])
+            enc_ratio = 0.0
+            failed_access = np.random.choice([0, 1], p=[0.86, 0.14])
+            admin_act = 0
+            bytes_mb = np.random.uniform(0.2, 3.8)
+            unknown_proc = np.random.choice([0, 1], p=[0.82, 0.18])
 
         seq_data[t] = [
             max(0.0, write_rate),
@@ -146,7 +179,7 @@ def generate_benign_sequence(
             max(0.0, dir_traversal),
             max(0.0, suspicious_api),
             max(1.0, unique_ext),
-            max(0.0, enc_ratio),
+            np.clip(enc_ratio, 0.0, 1.0),
             max(0.0, failed_access),
             max(0.0, admin_act),
             max(0.0, bytes_mb),
@@ -162,119 +195,175 @@ def generate_ransomware_sequence(
     """
     Generate a 20-step behavioral telemetry sequence demonstrating realistic
     temporal ransomware progression:
-      Phase 1 (t=0..4): Discovery, reconnaissance, stealthy staging
-      Phase 2 (t=5..9): Defense evasion, shadow copy inhibition, enumeration
-      Phase 3 (t=10..14): Active encryption ramp-up, massive file writes & renames
-      Phase 4 (t=15..19): Full impact, ransom note drop, persistent CPU surge
+      Phase 1 (Reconnaissance): Directory traversal, file enumeration, API probes
+      Phase 2 (Defense Evasion): Volume shadow copy deletion, catalog pruning, privilege actions
+      Phase 3 (Bulk Encryption): High entropy, mass file writes, extension changes
+      Phase 4 (Extortion/Impact): Ransom notes dropped, CPU surge, lockups
+    Transitions are dynamically paced with randomized durations.
     """
     seq_data = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
 
-    # Subtype distribution: standard aggressive (80%), stealthy low-rate (14%), unprivileged/intermittent (6%)
-    attack_type = np.random.choice(["standard", "stealthy", "unprivileged"], p=[0.80, 0.14, 0.06])
-    escalation_factor = 0.50 if attack_type == "stealthy" else (0.70 if attack_type == "unprivileged" else 1.0)
+    # Attack types: 50% standard kill-chain, 25% fast burst, 15% stealthy throttled, 10% interrupted/stalled
+    attack_type = np.random.choice(["standard", "fast", "stealthy", "interrupted"], p=[0.50, 0.25, 0.15, 0.10])
 
-    # Start time of aggressive encryption phase
-    encryption_start_step = np.random.randint(8, 12)
+    recon_len = np.random.randint(1, 6)
+    inhibit_len = np.random.randint(1, 4)
+    enc_start = recon_len + inhibit_len
+
+    base_cpu = host_profile["base_cpu"]
+    base_mem = host_profile["base_mem"]
+    base_net = host_profile["base_net"]
 
     for t in range(SEQ_LEN):
-        intensity = t / (SEQ_LEN - 1)
         noise = np.random.normal(0.0, 0.5)
 
-        if t < 5:
-            # Phase 1: Reconnaissance / Initial Execution
-            write_rate = np.random.uniform(1.0, 9.0) + max(0.0, noise)
-            rename_rate = 0.0
-            delete_rate = 0.0
-            entropy_delta = np.random.normal(0.01, 0.03)
-            ext_change_rate = 0.0
-            proc_create = np.random.poisson(lam=1.5)
-            shadow_cmd = 0
-            backup_del = 0
-            cpu = host_profile["base_cpu"] + np.random.uniform(2.0, 9.0)
-            mem = host_profile["base_mem"] + np.random.uniform(1.0, 7.0)
-            net_conn = host_profile["base_net"] + np.random.uniform(5.0, 20.0)
-            file_open = np.random.uniform(5.0, 22.0)
-            dir_traversal = np.random.uniform(8.0, 28.0)
-            suspicious_api = np.random.choice([0, 1, 2], p=[0.60, 0.30, 0.10])
-            unique_ext = np.random.randint(3, 8)
-            enc_ratio = 0.0
-            failed_access = np.random.choice([0, 1], p=[0.80, 0.20])
-            admin_act = np.random.choice([0, 1], p=[0.85, 0.15])
-            bytes_mb = np.random.uniform(0.1, 2.2)
-            unknown_proc = 1
+        if attack_type == "standard":
+            if t < recon_len:
+                # Phase 1: Reconnaissance
+                write_rate = np.random.uniform(3.0, 18.0)
+                rename_rate = 0.0
+                delete_rate = 0.0
+                entropy_delta = np.random.normal(0.02, 0.04)
+                ext_change_rate = 0.0
+                proc_create = np.random.uniform(1.4, 3.8)
+                shadow_cmd = 0
+                backup_del = 0
+                cpu = base_cpu + np.random.uniform(2.0, 8.0)
+                mem = base_mem + np.random.uniform(2.0, 7.0)
+                net_conn = base_net + np.random.uniform(5.0, 18.0)
+                file_open = np.random.uniform(15.0, 50.0)
+                dir_traversal = np.random.uniform(25.0, 70.0)
+                suspicious_api = np.random.uniform(2.0, 5.0)
+                unique_ext = np.random.randint(4, 9)
+                enc_ratio = 0.0
+                failed_access = np.random.choice([0, 1], p=[0.75, 0.25])
+                admin_act = 0
+                bytes_mb = np.random.uniform(0.5, 3.0)
+                unknown_proc = np.random.choice([0, 1, 2], p=[0.30, 0.50, 0.20])
 
-        elif t < encryption_start_step:
-            # Phase 2: Defense Evasion & Backup Invalidation
-            write_rate = np.random.uniform(6.0, 28.0)
-            rename_rate = np.random.choice([0, 1, 2], p=[0.65, 0.25, 0.10])
-            delete_rate = np.random.choice([1, 2, 3], p=[0.50, 0.35, 0.15])
-            entropy_delta = np.random.uniform(0.05, 0.28)
-            ext_change_rate = np.random.choice([0.0, 1.0], p=[0.75, 0.25])
-            proc_create = np.random.poisson(lam=2.3)
-            # Unprivileged ransomware CANNOT delete shadow copies
-            shadow_cmd = np.random.choice([1, 2, 3], p=[0.40, 0.40, 0.20]) if attack_type != "unprivileged" else 0
-            backup_del = np.random.choice([1, 2], p=[0.60, 0.40]) if attack_type != "unprivileged" else 0
-            cpu = host_profile["base_cpu"] + np.random.uniform(15.0, 35.0)
-            mem = host_profile["base_mem"] + np.random.uniform(5.0, 16.0)
-            net_conn = host_profile["base_net"] + np.random.uniform(10.0, 35.0)
-            file_open = np.random.uniform(25.0, 60.0)
-            dir_traversal = np.random.uniform(30.0, 85.0)
-            suspicious_api = np.random.randint(2, 6)
-            unique_ext = np.random.randint(6, 15)
-            enc_ratio = np.random.uniform(0.02, 0.12)
-            failed_access = np.random.choice([1, 2, 3, 4], p=[0.40, 0.30, 0.20, 0.10])
-            admin_act = np.random.choice([1, 2], p=[0.50, 0.50]) if attack_type != "unprivileged" else np.random.choice([0, 1])
-            bytes_mb = np.random.uniform(2.0, 14.0)
-            unknown_proc = np.random.choice([1, 2], p=[0.60, 0.40])
+            elif t < enc_start:
+                # Phase 2: Defense Evasion & Inhibition
+                write_rate = np.random.uniform(14.0, 36.0)
+                rename_rate = np.random.uniform(1.0, 4.0)
+                delete_rate = np.random.uniform(1.0, 4.0)
+                entropy_delta = np.random.uniform(0.10, 0.35)
+                ext_change_rate = np.random.uniform(1.0, 4.0)
+                proc_create = np.random.uniform(3.0, 6.0)
+                shadow_cmd = np.random.choice([1, 2, 3], p=[0.45, 0.40, 0.15])
+                backup_del = np.random.choice([1, 2], p=[0.55, 0.45])
+                cpu = base_cpu + np.random.uniform(15.0, 30.0)
+                mem = base_mem + np.random.uniform(10.0, 20.0)
+                net_conn = base_net + np.random.uniform(10.0, 24.0)
+                file_open = np.random.uniform(30.0, 80.0)
+                dir_traversal = np.random.uniform(38.0, 85.0)
+                suspicious_api = np.random.uniform(5.5, 11.5)
+                unique_ext = np.random.randint(6, 15)
+                enc_ratio = 0.04
+                failed_access = np.random.choice([1, 2, 4], p=[0.40, 0.40, 0.20])
+                admin_act = 1
+                bytes_mb = np.random.uniform(3.0, 12.0)
+                unknown_proc = np.random.choice([0, 1, 2], p=[0.30, 0.50, 0.20])
+
+            else:
+                # Phase 3 & 4: Bulk Encryption & Note Dropping
+                progress = (t - enc_start) / max(1, (SEQ_LEN - enc_start))
+                write_rate = np.random.uniform(75.0, 195.0) * (1.0 + 0.30 * progress) + max(0.0, noise * 2)
+                rename_rate = np.random.uniform(28.0, 88.0) * (1.0 + 0.40 * progress)
+                delete_rate = np.random.uniform(8.0, 36.0)
+                entropy_delta = np.random.uniform(0.95, 2.05)
+                ext_change_rate = np.random.uniform(26.0, 88.0)
+                proc_create = np.random.uniform(1.0, 4.0)
+                shadow_cmd = 0
+                backup_del = 0
+                cpu = np.clip(base_cpu + 35.0 + progress * 25.0, 30.0, 98.0)
+                mem = np.clip(base_mem + 20.0 + progress * 20.0, 30.0, 95.0)
+                net_conn = base_net + np.random.uniform(5.0, 18.0)
+                file_open = write_rate * np.random.uniform(1.2, 1.8)
+                dir_traversal = np.random.uniform(38.0, 98.0)
+                suspicious_api = np.random.uniform(6.5, 17.0)
+                unique_ext = np.random.randint(14, 30)
+                enc_ratio = np.clip(0.30 + 0.65 * progress, 0.18, 0.98)
+                failed_access = np.random.choice([2, 5, 8, 14], p=[0.30, 0.40, 0.20, 0.10])
+                admin_act = 0
+                bytes_mb = np.random.uniform(30.0, 115.0)
+                unknown_proc = np.random.choice([0, 1, 2], p=[0.30, 0.50, 0.20])
+
+        elif attack_type == "fast":
+            if t < 2:
+                write_rate, rename_rate, delete_rate, entropy_delta = 28.0, 2.0, 2.0, 0.20
+                ext_change_rate, proc_create, shadow_cmd, backup_del = 2.0, 4.0, 2, 1
+                cpu, mem, net_conn = base_cpu + 25.0, base_mem + 15.0, base_net + 15.0
+                file_open, dir_traversal, suspicious_api, unique_ext = 55.0, 50.0, 9.0, 8
+                enc_ratio, failed_access, admin_act, bytes_mb, unknown_proc = 0.08, 3, 1, 12.0, 1
+            else:
+                write_rate = np.random.uniform(105.0, 230.0)
+                rename_rate = np.random.uniform(45.0, 115.0)
+                delete_rate = np.random.uniform(14.0, 48.0)
+                entropy_delta = np.random.uniform(1.10, 2.20)
+                ext_change_rate = np.random.uniform(45.0, 115.0)
+                proc_create = 2.0
+                shadow_cmd = 0
+                backup_del = 0
+                cpu = np.random.uniform(70.0, 99.0)
+                mem = np.random.uniform(50.0, 92.0)
+                net_conn = base_net + 10.0
+                file_open = np.random.uniform(150.0, 310.0)
+                dir_traversal = np.random.uniform(50.0, 98.0)
+                suspicious_api = np.random.uniform(8.5, 19.5)
+                unique_ext = np.random.randint(16, 32)
+                enc_ratio = np.clip(0.38 + 0.03 * t, 0.28, 0.99)
+                failed_access = np.random.randint(3, 14)
+                admin_act = 0
+                bytes_mb = np.random.uniform(55.0, 140.0)
+                unknown_proc = np.random.choice([0, 1, 2], p=[0.20, 0.60, 0.20])
+
+        elif attack_type == "stealthy":
+            # Throttled low-and-slow: lower write rate, subtle partial encryption, LOLBins execution
+            enc_active = (t >= 7)
+            write_rate = np.random.uniform(22.0, 60.0) if enc_active else np.random.uniform(4.0, 18.0)
+            rename_rate = np.random.uniform(8.0, 26.0) if enc_active else 0.0
+            delete_rate = np.random.uniform(2.0, 7.0) if enc_active else 0.0
+            entropy_delta = np.random.uniform(0.38, 0.85) if enc_active else 0.03
+            ext_change_rate = np.random.uniform(8.0, 24.0) if enc_active else 0.0
+            proc_create = np.random.uniform(1.5, 3.2)
+            shadow_cmd = 1 if (t == 4 and np.random.rand() < 0.35) else 0
+            backup_del = 0
+            cpu = base_cpu + (np.random.uniform(16.0, 35.0) if enc_active else 5.0)
+            mem = base_mem + 12.0
+            net_conn = base_net + 8.0
+            file_open = np.random.uniform(30.0, 75.0) if enc_active else 15.0
+            dir_traversal = np.random.uniform(25.0, 55.0)
+            suspicious_api = np.random.uniform(3.0, 7.0) if enc_active else 1.6
+            unique_ext = np.random.randint(6, 16) if enc_active else 4
+            enc_ratio = np.random.uniform(0.12, 0.42) if enc_active else 0.0
+            failed_access = np.random.choice([0, 1, 2], p=[0.55, 0.30, 0.15])
+            admin_act = 1 if (t == 4 and np.random.rand() < 0.35) else 0
+            bytes_mb = np.random.uniform(10.0, 32.0) if enc_active else 2.0
+            unknown_proc = np.random.choice([0, 1], p=[0.75, 0.25]) # LOLBins (known process binaries)
 
         else:
-            # Phase 3 & 4: Encryption
-            progress = (t - encryption_start_step) / (SEQ_LEN - encryption_start_step)
-            scale = escalation_factor * (1.0 + progress * 1.3)
-
-            if attack_type == "stealthy":
-                # Throttled low-and-slow ransomware avoiding rate triggers
-                write_rate = np.random.uniform(30.0, 75.0) + max(0.0, noise * 2)
-                rename_rate = np.random.uniform(8.0, 28.0)
-                delete_rate = np.random.uniform(3.0, 12.0)
-                entropy_delta = np.random.uniform(0.25, 0.65) # intermittent encryption
-                ext_change_rate = np.random.uniform(6.0, 22.0)
-                enc_ratio = np.clip(0.18 + (progress * 0.35), 0.1, 0.60)
-                cpu = np.random.uniform(35.0, 65.0)
-                bytes_mb = np.random.uniform(8.0, 32.0)
-            elif attack_type == "unprivileged":
-                # User-mode encryption with blocked admin rights
-                write_rate = np.random.uniform(45.0, 115.0) + max(0.0, noise * 3)
-                rename_rate = np.random.uniform(18.0, 52.0)
-                delete_rate = np.random.uniform(6.0, 22.0)
-                entropy_delta = np.random.uniform(0.40, 0.95)
-                ext_change_rate = np.random.uniform(12.0, 42.0)
-                enc_ratio = np.clip(0.25 + (progress * 0.45), 0.15, 0.75)
-                cpu = np.random.uniform(45.0, 75.0)
-                bytes_mb = np.random.uniform(14.0, 48.0)
-            else:
-                # Standard aggressive multi-threaded ransomware
-                write_rate = (np.random.uniform(85.0, 240.0) * scale) + max(0.0, noise * 5)
-                rename_rate = (np.random.uniform(38.0, 140.0) * scale)
-                delete_rate = (np.random.uniform(14.0, 55.0) * scale)
-                entropy_delta = np.clip(np.random.uniform(0.65, 1.65) * scale, 0.25, 2.5)
-                ext_change_rate = (np.random.uniform(28.0, 110.0) * scale)
-                enc_ratio = np.clip(0.35 + (progress * 0.60) + np.random.uniform(-0.04, 0.04), 0.2, 0.98)
-                cpu = np.clip(host_profile["base_cpu"] + 45.0 * scale + np.random.uniform(5.0, 20.0), 30.0, 99.5)
-                bytes_mb = (np.random.uniform(25.0, 95.0) * scale)
-
-            proc_create = np.random.poisson(lam=1.8)
-            shadow_cmd = 0
+            # Interrupted / stalled ransomware
+            write_rate = np.random.uniform(8.0, 35.0)
+            rename_rate = np.random.choice([0, 1, 2], p=[0.60, 0.30, 0.10])
+            delete_rate = 0.0
+            entropy_delta = np.random.uniform(0.08, 0.35)
+            ext_change_rate = np.random.choice([0, 1, 2], p=[0.60, 0.30, 0.10])
+            proc_create = 2.0
+            shadow_cmd = 1 if (t == 4 and np.random.rand() < 0.55) else 0
             backup_del = 0
-            mem = np.clip(host_profile["base_mem"] + 25.0 * scale + np.random.uniform(2.0, 15.0), 35.0, 98.0)
-            net_conn = host_profile["base_net"] + np.random.uniform(2.0, 15.0)
-            file_open = write_rate * np.random.uniform(1.2, 1.8)
-            dir_traversal = np.random.uniform(35.0, 95.0)
-            suspicious_api = int(np.random.uniform(4.0, 16.0) * scale)
-            unique_ext = np.random.randint(10, 26)
-            failed_access = np.random.randint(3, 14)
-            admin_act = np.random.choice([0, 1], p=[0.70, 0.30])
-            unknown_proc = np.random.choice([1, 2], p=[0.70, 0.30])
+            cpu = base_cpu + 15.0
+            mem = base_mem + 10.0
+            net_conn = base_net + 10.0
+            file_open = np.random.uniform(20.0, 60.0)
+            dir_traversal = np.random.uniform(25.0, 65.0)
+            api = np.random.uniform(3.0, 7.5)
+            suspicious_api = api
+            unique_ext = np.random.randint(4, 10)
+            enc_ratio = 0.08
+            failed_access = np.random.choice([1, 2, 4], p=[0.40, 0.40, 0.20])
+            admin_act = 1 if t == 4 else 0
+            bytes_mb = 4.5
+            unknown_proc = np.random.choice([0, 1, 2], p=[0.35, 0.50, 0.15])
 
         seq_data[t] = [
             max(0.0, write_rate),
@@ -292,7 +381,7 @@ def generate_ransomware_sequence(
             max(0.0, dir_traversal),
             max(0.0, suspicious_api),
             max(1.0, unique_ext),
-            max(0.0, enc_ratio),
+            np.clip(enc_ratio, 0.0, 1.0),
             max(0.0, failed_access),
             max(0.0, admin_act),
             max(0.0, bytes_mb),
@@ -306,12 +395,10 @@ def generate_synthetic_dataset(
     n_sequences: int = N_SEQUENCES,
     benign_ratio: float = BENIGN_RATIO,
     seed: int = SEED,
-    ambiguity_rate: float = 0.024,
 ) -> pd.DataFrame:
     """
-    Generate balanced or custom-ratio synthetic behavioral telemetry dataset.
-    Includes realistic edge cases and borderline telemetry to prevent artificial
-    100% separability, yielding realistic academic evaluation metrics.
+    Generate balanced synthetic behavioral telemetry dataset with realistic,
+    continuous, and heterogeneous endpoint dynamics.
     Returns a unified pandas DataFrame with metadata and telemetry columns.
     """
     set_seed(seed)
@@ -362,19 +449,6 @@ def generate_synthetic_dataset(
             records.append(row_dict)
 
     df = pd.DataFrame(records)
-
-    # Introduce realistic boundary ambiguity (authorized admin stress-tests vs blocked/aborted malware)
-    if ambiguity_rate > 0.0:
-        n_ambiguous = int(n_sequences * ambiguity_rate)
-        half = n_ambiguous // 2
-        ambig_benign = np.random.choice(range(n_benign), size=half, replace=False)
-        ambig_ransom = np.random.choice(range(n_benign, n_sequences), size=half, replace=False)
-        ambig_seqs = np.concatenate([ambig_benign, ambig_ransom])
-
-        mask = df["sequence_id"].isin(ambig_seqs)
-        df.loc[mask, "label"] = 1 - df.loc[mask, "label"]
-        print(f"[*] Incorporated {n_ambiguous} realistic telemetry edge cases ({ambiguity_rate*100:.1f}%) for non-trivial boundary modeling.")
-
     print(f"[+] Successfully generated dataset with shape {df.shape}")
     return df
 

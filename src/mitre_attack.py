@@ -147,3 +147,4 @@ def map_threat_to_mitre(
         matched["T1083"] = tech
 
     return list(matched.values())
+

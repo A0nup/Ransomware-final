@@ -221,3 +221,4 @@ def generate_pdf_incident_report(
             return f.read()
 
     return buffer.getvalue()
+

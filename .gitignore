@@ -37,7 +37,9 @@ htmlcov/
 .idea/
 *.swp
 
-# OS
+# Scratch directory
+scratch/
+
 .DS_Store
 Thumbs.db
 

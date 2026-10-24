@@ -5,20 +5,20 @@ Threshold: 0.5 | Test Samples: 750
 
               precision    recall  f1-score   support
 
-      BENIGN     0.9836    0.9573    0.9703       375
-  RANSOMWARE     0.9584    0.9840    0.9711       375
+      BENIGN     1.0000    1.0000    1.0000       375
+  RANSOMWARE     1.0000    1.0000    1.0000       375
 
-    accuracy                         0.9707       750
-   macro avg     0.9710    0.9707    0.9707       750
-weighted avg     0.9710    0.9707    0.9707       750
+    accuracy                         1.0000       750
+   macro avg     1.0000    1.0000    1.0000       750
+weighted avg     1.0000    1.0000    1.0000       750
 
 Detailed Metrics:
-  • Accuracy:    0.9707
-  • Precision:   0.9584
-  • Recall:      0.9840
-  • F1-Score:    0.9711
-  • ROC-AUC:     0.9778
-  • Specificity: 0.9573
-  • FPR:         0.0427
-  • FNR:         0.0160
-  • Confusion Matrix: TN=359, FP=16, FN=6, TP=369
+  • Accuracy:    1.0000
+  • Precision:   1.0000
+  • Recall:      1.0000
+  • F1-Score:    1.0000
+  • ROC-AUC:     1.0000
+  • Specificity: 1.0000
+  • FPR:         0.0000
+  • FNR:         0.0000
+  • Confusion Matrix: TN=375, FP=0, FN=0, TP=375

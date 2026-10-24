@@ -131,3 +131,4 @@ def create_entropy_profile_chart(entropy_result: Dict[str, Any], file_name: str 
     )
 
     return fig
+

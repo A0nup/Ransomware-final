@@ -213,3 +213,4 @@ def compute_hybrid_fused_score(
         "yara_matches": yara_matches,
         "sigma_matches": sigma_matches,
     }
+

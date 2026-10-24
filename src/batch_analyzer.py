@@ -124,3 +124,4 @@ def process_batch_files(files_data: List[Tuple[str, bytes]]) -> Dict[str, Any]:
         "items": results,
         "summary_table": summary_df,
     }
+

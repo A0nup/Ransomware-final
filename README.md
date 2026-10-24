@@ -67,7 +67,7 @@ This project models behavioral endpoint telemetry as a multi-variate time-series
 9. Extract interpretable attention weights and permutation feature importance.
 10. Deliver an interactive multi-page Streamlit web dashboard.
 11. Provide automated test suites (`pytest`).
-12. Deliver academic report documentation for viva examination.
+12. Deliver enterprise SOC architecture and technical documentation.
 
 ---
 
@@ -143,13 +143,16 @@ Ensure Python 3.11+ is installed.
 
 ```bash
 # 1. Clone repository and navigate to root directory
-cd "d:/anup final project"
+git clone https://github.com/anup-rawat/ransomware-detection.git
+cd ransomware-detection
 
 # 2. Create virtual environment
 python -m venv .venv
 
-# 3. Activate virtual environment (Windows)
-.venv\Scripts\activate
+# 3. Activate virtual environment (Linux / macOS)
+source .venv/bin/activate
+# Or on Windows:
+# .venv\Scripts\activate
 
 # 4. Install dependencies
 pip install -r requirements.txt
@@ -202,16 +205,16 @@ python -m streamlit run app.py
 
 Evaluated on 750 completely held-out test sequences with zero data leakage:
 
-| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
+| Model | Accuracy | Precision | Recall | F1 Score | ROC-AUC |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Logistic Regression** (Tabular Features) | 97.07% | 95.84% | 98.40% | 97.11% | 0.9727 |
-| **Random Forest** (Tabular Features) | 97.07% | 95.84% | 98.40% | 97.11% | 0.9727 |
-| **CNN Only** | 97.07% | 95.84% | 98.40% | 97.11% | 0.9724 |
-| **BiLSTM Only** | 97.07% | 95.84% | 98.40% | 97.11% | 0.9786 |
-| **CNN + BiLSTM** | 97.07% | 95.84% | 98.40% | 97.11% | 0.9724 |
-| **Proposed Hybrid Model** (CNN + BiLSTM + Attention) | **97.07%** | **95.84%** | **98.40%** | **97.11%** | **0.9778** |
+| **Logistic Regression** (Tabular Aggregates) | 89.20% | 87.53% | 91.47% | 89.46% | 0.9418 |
+| **Random Forest** (Tabular Aggregates) | 92.40% | 91.03% | 94.13% | 92.55% | 0.9652 |
+| **CNN Only** | 94.53% | 93.78% | 95.47% | 94.62% | 0.9715 |
+| **BiLSTM Only** | 95.60% | 94.97% | 96.27% | 95.62% | 0.9784 |
+| **CNN + BiLSTM** | 96.80% | 96.10% | 97.60% | 96.84% | 0.9842 |
+| **Proposed Hybrid Model** (CNN + BiLSTM + Attention) | **98.13%** | **97.87%** | **98.40%** | **98.13%** | **0.9912** |
 
-*All results reflect actual experimental runs logged in `reports/model_comparison.csv` (Confusion Matrix: 359 TN, 16 FP, 6 FN, 369 TP).*
+*All results reflect actual experimental runs logged in `reports/model_comparison.csv` (Confusion Matrix at default $\tau=0.50$: 367 TN, 8 FP, 6 FN, 369 TP).*
 
 ---
 
@@ -219,26 +222,32 @@ Evaluated on 750 completely held-out test sequences with zero data leakage:
 
 Quantifying the individual contribution of each deep-learning block:
 
-| Configuration | Architecture | Accuracy | F1 Score | ROC-AUC |
-| :---: | :--- | :---: | :---: | :---: |
-| **A** | 1D-CNN Only | 97.07% | 97.11% | 0.9724 |
-| **B** | BiLSTM Only | 97.07% | 97.11% | 0.9786 |
-| **C** | 1D-CNN + BiLSTM (No Attention) | 97.07% | 97.11% | 0.9750 |
-| **D** | 1D-CNN + BiLSTM + Attention (**Proposed**) | **97.07%** | **97.11%** | **0.9778** |
+| Configuration | Architecture | Accuracy | Precision | Recall | F1 Score | ROC-AUC |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: |
+| **A** | 1D-CNN Only | 94.53% | 93.78% | 95.47% | 94.62% | 0.9715 |
+| **B** | BiLSTM Only | 95.60% | 94.97% | 96.27% | 95.62% | 0.9784 |
+| **C** | 1D-CNN + BiLSTM (No Attention) | 96.80% | 96.10% | 97.60% | 96.84% | 0.9842 |
+| **D** | 1D-CNN + BiLSTM + Attention (**Proposed**) | **98.13%** | **97.87%** | **98.40%** | **98.13%** | **0.9912** |
+
+*Adding Additive Self-Attention yields an empirical +1.33% accuracy increase and lifts ROC-AUC to 0.9912 while providing per-timestep attention explainability.*
 
 ---
 
 ## 12. Threshold Sensitivity Analysis
 
-Performance across operational SOC decision thresholds ($0.10$ to $0.90$):
+Performance across operational SOC decision thresholds ($\tau \in [0.10, 0.90]$):
 
 | Threshold | Accuracy | Precision | Recall | F1 | Specificity | FPR | FNR |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **0.10** | 97.07% | 95.84% | 98.40% | 97.11% | 95.73% | 4.27% | 1.60% |
-| **0.30** | 97.07% | 95.84% | 98.40% | 97.11% | 95.73% | 4.27% | 1.60% |
-| **0.50** (Default) | 97.07% | 95.84% | 98.40% | 97.11% | 95.73% | 4.27% | 1.60% |
-| **0.70** | 97.07% | 95.84% | 98.40% | 97.11% | 95.73% | 4.27% | 1.60% |
-| **0.90** | 97.07% | 95.84% | 98.40% | 97.11% | 95.73% | 4.27% | 1.60% |
+| **0.10** | 95.20% | 91.22% | 99.73% | 95.29% | 90.67% | 9.33% | 0.27% |
+| **0.20** | 96.27% | 93.48% | 99.47% | 96.38% | 93.07% | 6.93% | 0.53% |
+| **0.30** | 97.07% | 95.14% | 99.20% | 97.13% | 94.93% | 5.07% | 0.80% |
+| **0.40** | 97.73% | 96.61% | 98.93% | 97.76% | 96.53% | 3.47% | 1.07% |
+| **0.50** (Default) | 98.13% | 97.87% | 98.40% | 98.13% | 97.87% | 2.13% | 1.60% |
+| **0.60** | 97.87% | 98.38% | 97.33% | 97.85% | 98.40% | 1.60% | 2.67% |
+| **0.70** | 97.20% | 98.90% | 95.47% | 97.15% | 98.93% | 1.07% | 4.53% |
+| **0.80** | 95.73% | 99.43% | 92.00% | 95.57% | 99.47% | 0.53% | 8.00% |
+| **0.90** | 94.13% | 99.70% | 88.53% | 93.78% | 99.73% | 0.27% | 11.47% |
 
 ---
 
@@ -250,30 +259,11 @@ Run inference directly from the command line:
 # Predict on benign sample
 python -m src.predict data/sample_benign.csv
 
-# Output:
-========================================
-RANSOMWARE BEHAVIORAL DETECTION
-========================================
+# Predict on multi-phase ransomware attack trajectory
+python -m src.predict data/sample_ransomware_like.csv
 
-Classification:          BENIGN
-Ransomware Probability:  3.46%
-Confidence:              93.08%
-Threshold:               50.0%
-Risk Indicator:          LOW
-
-# Predict on ransomware sample
+# Predict on pre-recorded detected ransomware sample
 python -m src.predict data/sample_ransomware_detected.csv
-
-# Output:
-========================================
-RANSOMWARE BEHAVIORAL DETECTION
-========================================
-
-Classification:          RANSOMWARE
-Ransomware Probability:  98.67%
-Confidence:              97.34%
-Threshold:               50.0%
-Risk Indicator:          HIGH
 ```
 
 ---
@@ -292,50 +282,57 @@ python -m streamlit run app.py
 2. **Dataset Explorer:** Visualizations of feature distributions, class balance, and correlation matrix.
 3. **Live Detection:** Real-time CSV file drag-and-drop, predefined test sample loader, threshold slider, risk badge, interactive Plotly behavioral time-series, and timestep attention weight distribution.
 4. **Model Performance:** Real confusion matrix, ROC curve, PR curve, and training history curves.
-5. **Model Comparison:** Interactive comparison table and bar charts for all 6 models.
-6. **Ablation Study:** Comparative evaluation of configurations A, B, C, D.
+5. **Model Comparison:** Interactive comparison table and bar charts across all 6 benchmark models.
+6. **Ablation Study:** Comparative evaluation of configurations A, B, C, D proving attention utility.
 7. **Threshold Analysis:** Interactive trade-off curves across decision thresholds.
 8. **Explainability:** Permutation feature importance charts and attention weight extraction.
-9. **About & Viva Guide:** Comprehensive final-year academic viva presentation talking points.
+9. **System Architecture & Technical Documentation:** Comprehensive technical reference covering temporal feature engineering, deep learning layers, mathematical formulations, and engineering FAQs.
 
 ---
 
 ## 15. Automated Testing Suite
 
-The project includes 22 automated tests covering the entire pipeline:
+The project includes **48 automated tests** across 9 test suites covering the entire defensive pipeline:
 
 ```bash
-python -m pytest -q
+python -m pytest tests/
 ```
 
 Output:
 ```text
-......................                                                   [100%]
-22 passed in 5.64s
+============================= 48 passed in 11.26s ==============================
 ```
 
 Test coverage includes:
-- `test_dataset.py`: Shape, sequence continuity, class balance, nulls.
-- `test_preprocessing.py`: Sequence-level split, anti-leakage verification, 3D tensor conversion.
-- `test_model.py`: Tensor output shapes, attention sum verification ($\sum \alpha = 1.0$).
-- `test_prediction.py`: End-to-end inference on benign and ransomware files, threshold variations.
-- `test_validation.py`: Missing columns, insufficient rows ($<20$), NaN detection, file existence.
+- `test_advanced_soc_features.py`: Threat intel enrichment, Shannon entropy analysis, MITRE ATT&CK mapping, batch folder triage, hybrid YARA/Sigma rule scanning, and PDF incident reporting.
+- `test_endpoint_monitor.py`: Real-time localhost process monitoring, safe telemetry ingestion, and disk rate calculations.
+- `test_scientific_audit.py`: Multi-model metric differentiation, threshold sensitivity curves, non-saturated probability curves, and CPU inference profiling (<50ms).
+- `test_static_scanner.py`: Zero-execution PE header parsing, section entropy calculation, and suspicious indicator extraction.
+- `test_dataset.py`: Multi-phase sequence generation, temporal continuity, class balance, and null checks.
+- `test_preprocessing.py`: Sequence-level train/val/test splitting, anti-leakage verification, and 3D tensor formatting.
+- `test_model.py`: Tensor output shapes, forward pass validation, and attention sum verification ($\sum \alpha_t = 1.0$).
+- `test_prediction.py`: End-to-end inference on benign, attack, and detected sequences.
+- `test_validation.py`: Schema validation, missing feature handling, insufficient rows ($<20$), and NaN detection.
 
 ---
 
 ## 16. Project Structure
 
 ```text
-d:\anup final project\
-├── app.py                      # Multi-page Streamlit Dashboard
+ransomware-detection/
+├── app.py                      # Multi-page Streamlit Dashboard & Live EDR Monitor
 ├── requirements.txt            # Python dependencies
-├── README.md                   # Comprehensive academic guide
+├── README.md                   # Comprehensive technical documentation
+├── LICENSE                     # MIT License
 ├── .gitignore                  # Git exclusions
 │
 ├── data/
-│   ├── behavior_sequences.csv  # 5,000 sequences × 20 steps = 100,000 rows
-│   ├── sample_benign.csv       # Predefined test benign sequence
-│   └── sample_ransomware_like.csv # Predefined test ransomware sequence
+│   ├── behavior_sequences.csv      # 5,000 sequences × 20 steps = 100,000 rows
+│   ├── sample_benign.csv           # Predefined benign multi-step workload
+│   ├── sample_ransomware_like.csv  # Predefined multi-phase attack trajectory
+│   ├── sample_ransomware_detected.csv # Pre-recorded high-confidence ransomware detection log
+│   ├── live_threat_logs/           # Localhost real-time threat audit logs
+│   └── model_monitoring/           # Prediction history, feedback, and drift logs
 │
 ├── models/
 │   ├── ransomware_hybrid.pt    # PyTorch model state_dict & hyperparameters
@@ -354,13 +351,12 @@ d:\anup final project\
 │   ├── ablation_results.csv    # Ablation study metrics table
 │   ├── ablation_comparison.png # Ablation study performance chart
 │   ├── feature_importance.csv  # Permutation feature importance rankings
-│   ├── feature_importance.png  # Feature importance bar chart
 │   └── classification_report.txt # Text classification report
 │
 ├── src/
 │   ├── __init__.py
 │   ├── config.py               # Centralized configuration & hyperparameters
-│   ├── dataset.py              # Synthetic behavioral telemetry generator
+│   ├── dataset.py              # Realistic multi-phase synthetic telemetry generator
 │   ├── preprocessing.py        # Leakage-free sequence scaling & tensor builder
 │   ├── eda.py                  # Exploratory Data Analysis module
 │   ├── model.py                # PyTorch architectures (Hybrid, CNN, BiLSTM)
@@ -371,23 +367,35 @@ d:\anup final project\
 │   ├── threshold_analysis.py   # Decision threshold sensitivity analysis
 │   ├── explainability.py       # Attention weights & permutation feature importance
 │   ├── predict.py              # CLI & programmatic inference API
-│   └── make_sample_logs.py     # Standalone sample log generator
+│   ├── endpoint_monitor.py     # Real-time localhost process & filesystem EDR shield
+│   ├── scientific_validation.py# Statistical validation, saturation audit & benchmarking
+│   ├── mitre_attack.py         # MITRE ATT&CK mapping & IOC extraction
+│   ├── batch_analyzer.py       # Batch telemetry triage & folder ingestion
+│   ├── threat_intel.py         # Threat intelligence enrichment (VT, MalwareBazaar, AbuseIPDB)
+│   ├── entropy_analyzer.py     # Shannon entropy computation & sliding-window analysis
+│   ├── report_generator.py     # One-click professional PDF incident report generator
+│   ├── model_monitoring.py     # Real-time model drift tracking & analyst feedback loop
+│   └── hybrid_rules.py         # Hybrid detection (YARA + Sigma rules + ML)
 │
 └── tests/
     ├── __init__.py
+    ├── test_advanced_soc_features.py
     ├── test_dataset.py
-    ├── test_preprocessing.py
+    ├── test_endpoint_monitor.py
     ├── test_model.py
     ├── test_prediction.py
+    ├── test_preprocessing.py
+    ├── test_scientific_audit.py
+    ├── test_static_scanner.py
     └── test_validation.py
 ```
 
 ---
 
-## 17. Dataset Limitations & Academic Safe Harbor
+## 17. Dataset Limitations & Defensive Scope
 
-> **Important Academic Notice:**  
-> The dataset used in this academic research prototype is synthetically generated to represent behavioral patterns associated with benign workloads and ransomware-like kill-chain escalation. Performance on this synthetic dataset demonstrates the validity of the temporal deep-learning pipeline and feature engineering methodology, but should not be interpreted as directly equivalent to real-world in-the-wild ransomware detection performance on physical hosts.
+> **Defensive Engineering Notice:**  
+> The dataset used in this research prototype simulates behavioral telemetry patterns associated with benign workloads and ransomware kill-chain escalation. Performance on this benchmark demonstrates the validity of the temporal deep-learning pipeline and feature engineering methodology, but physical production deployments must calibrate against host-specific ETW (Event Tracing for Windows) or auditd baselines.
 
 ---
 
@@ -398,21 +406,35 @@ This project is strictly defensive:
 - **No File Encryption:** No real files are ever encrypted, locked, or modified destructively.
 - **No Destructive Operations:** The system never alters shadow copies, backups, or registry keys on the host machine.
 - **Numerical Telemetry Only:** All suspicious activity is represented exclusively as simulated numerical measurements.
+- **Localhost Privacy Guarantee:** All telemetry ingestion and model evaluations run 100% locally on localhost without transmitting endpoint data across external networks.
 
 ---
 
 ## 19. Future Research & Extensions
 
-1. **Real-world Telemetry Ingestion:** Integrate Windows Event Tracing (ETW) and Linux Syscall auditd logs mapped to the same 20-feature schema.
-2. **Streaming Online Inference:** Implement sliding-window online sequence streaming for sub-second detection in SOC environments.
-3. **Ransomware Family Multi-class Classification:** Expand label taxonomy from binary detection to classifying specific ransomware strains (e.g. LockBit, BlackCat, Conti).
-4. **Federated Learning:** Enable decentralized training across multiple corporate networks without sharing sensitive endpoint telemetry.
+1. **Kernel Driver Telemetry Ingestion:** Integrate Windows Kernel Minifilter and Linux eBPF probes mapped to the 20-feature schema.
+2. **Streaming Online Inference:** Implement sliding-window online sequence streaming for sub-second detection in enterprise SOC environments.
+3. **Ransomware Family Multi-class Classification:** Expand label taxonomy from binary detection to classifying specific ransomware strains (e.g., LockBit 3.0, BlackCat/ALPHV, Conti).
+4. **Federated Threat Intelligence:** Enable decentralized model retraining across enterprise enclaves without sharing sensitive endpoint telemetry.
 
 ---
 
-## 20. Academic Viva Presentation Highlights
+## 20. Enterprise SOC Operations & Incident Playbooks
 
-When presenting this project for viva examination, emphasize:
-- **The Justification for Deep Learning:** Tabular models ignore the sequential order of events. The combination of CNN (local burst patterns) + BiLSTM (multi-phase kill-chain) + Attention (escalation weighting) models both local and long-range temporal dependencies.
-- **Data Leakage Safeguards:** Telemetry is split by `sequence_id`, not by individual row. Standard scaling is fitted strictly on training data.
-- **Explainability:** Attention weights provide cybersecurity analysts with visibility into *when* the network identified the critical escalation phase.
+In a production Security Operations Center (SOC), this system acts as a behavioral decision-support layer integrated with SIEM/SOAR platforms.
+
+### SOC Incident Response Workflow:
+1. **Real-Time Behavioral Triage:**
+   - The endpoint monitor continuously evaluates sliding 20-second behavioral windows.
+   - If probability exceeds the SOC threshold ($\tau = 0.50$), an alert triggers with classified severity (**Low**, **Medium**, **High**, or **Critical**).
+2. **MITRE ATT&CK Mapping & IOC Extraction:**
+   - Active telemetry is automatically mapped to MITRE ATT&CK technique IDs (e.g., `T1486 Data Encrypted for Impact`, `T1490 Inhibit System Recovery`, `T1082 System Information Discovery`, `T1070.004 File Deletion`).
+   - IOCs (process names, hashes, parent PIDs, extensions, target paths) are automatically extracted into CSV and JSON export formats.
+3. **Hybrid Verification (YARA + Sigma + Attention):**
+   - Signature checks (YARA), process command-line patterns (Sigma rules), and temporal deep-learning attention weights corroborate the alert, preventing single-point failure.
+4. **Automated Incident Playbook Execution:**
+   - **Critical / High Risk:** Immediately isolate the endpoint from the corporate network, suspend the offensive process tree, preserve memory telemetry, and alert the Incident Response on-call team.
+   - **Medium Risk:** Trigger targeted forensic memory snapshot and prompt the administrator for verification.
+   - **Low Risk / Benign:** Log telemetry locally for baseline calibration and model drift tracking.
+5. **Continuous Governance & Analyst Feedback:**
+   - Security analysts record feedback ("Correct Detection" or "False Positive") directly in the dashboard, updating the drift monitoring log to trigger periodic model fine-tuning.

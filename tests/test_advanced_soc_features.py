@@ -202,3 +202,4 @@ def test_batch_analysis_engine():
     assert batch_res["total_files"] == 2
     assert len(batch_res["items"]) == 2
     assert not batch_res["summary_table"].empty
+
