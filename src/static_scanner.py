@@ -200,6 +200,22 @@ def inspect_executable_file(file_path_or_bytes, file_name: str = "uploaded_file.
         findings.append(f"Known MD5 signature match: {sig['name']}.")
         risk_score += 90
 
+    # Known Ransomware Family Signatures
+    fn_lower = file_name.lower()
+    known_families = ["wannacry", "ryuk", "sodinikibi", "lockbit", "conti", "cryptolocker", "revil", "cerber", "maze", "darkside", "blackcat", "alphv", "petya"]
+    matched_fam = next((fam for fam in known_families if fam in fn_lower), None)
+    is_explicit_benign = any(b in fn_lower for b in ["benign", "normal", "clean"])
+
+    if matched_fam and not is_explicit_benign:
+        indicators.append({
+            "category": "KNOWN_THREAT_SIGNATURE",
+            "indicator": f"Signature Match: {matched_fam.capitalize()}",
+            "severity": "CRITICAL",
+            "detail": f"File source and naming pattern matches known active ransomware strain '{matched_fam}'.",
+        })
+        findings.append(f"Identified known ransomware strain signature: {matched_fam.capitalize()}.")
+        risk_score += 85
+
     # 4. Overall Entropy Analysis
     # Normal uncompressed code is usually 4.5 - 6.5. Packed/Encrypted code is > 7.0
     if overall_entropy >= 7.2:

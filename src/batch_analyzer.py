@@ -43,7 +43,7 @@ def process_batch_files(files_data: List[Tuple[str, bytes]]) -> Dict[str, Any]:
             if is_csv:
                 # Process behavioral CSV telemetry
                 csv_df = pd.read_csv(io.BytesIO(content))
-                pred = predict_csv(csv_df)
+                pred = predict_csv(csv_df, file_name=name)
                 ml_prob = pred["ransomware_probability"] / 100.0
 
                 mitre_techs = map_threat_to_mitre(

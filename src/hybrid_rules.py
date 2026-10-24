@@ -191,14 +191,15 @@ def compute_hybrid_fused_score(
     # Composite weighted fusion
     fused_score = 0.50 * ml_score + 0.30 * yara_score + 0.20 * sigma_score
 
-    # Hard overrides: Critical rule matches set floor
+    # Hard overrides: Critical rule matches set floor dynamically
     has_critical_yara = any(m.get("severity") == "CRITICAL" for m in yara_matches)
     has_critical_sigma = any(m.get("severity") == "CRITICAL" for m in sigma_matches)
 
     if has_critical_yara or has_critical_sigma:
-        fused_score = max(fused_score, 92.5)
+        dynamic_floor = 90.0 + min(6.5, (yara_score + sigma_score) * 0.03 + ml_score * 0.03)
+        fused_score = max(fused_score, dynamic_floor)
 
-    fused_score = round(min(100.0, max(0.0, fused_score)), 2)
+    fused_score = round(min(98.5, max(1.5, fused_score)), 2)
 
     tier = "CRITICAL" if fused_score >= 90.0 else ("HIGH" if fused_score >= 70.0 else ("MEDIUM" if fused_score >= 30.0 else "LOW"))
 

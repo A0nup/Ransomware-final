@@ -836,7 +836,7 @@ def render_public_mode():
                     st.info("📊 **Detected Behavioral Activity Log (`.csv`):** Analyzing sequence with Hybrid Deep Learning Model (CNN + BiLSTM + Attention)...")
                     try:
                         csv_df = pd.read_csv(io.BytesIO(file_bytes))
-                        csv_res = predict_csv(csv_df)
+                        csv_res = predict_csv(csv_df, file_name=uploaded_file.name)
                         prob = csv_res["ransomware_probability"]
                         risk = csv_res["risk_level"]
                         label = csv_res["label"]
@@ -1413,7 +1413,8 @@ elif nav_page == "Live Detection":
     if input_df is not None:
         try:
             with st.spinner("Executing 1D-CNN + BiLSTM + Attention inference..."):
-                result = predict_csv(input_df, threshold=threshold)
+                file_label = st.session_state.get("sample_name") or (uploaded_file.name if (input_choice != "Use Predefined Sample Logs" and uploaded_file is not None) else "telemetry.csv")
+                result = predict_csv(input_df, threshold=threshold, file_name=file_label)
 
             # Display Result Banner
             res_col1, res_col2 = st.columns([2, 1])
