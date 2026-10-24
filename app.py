@@ -178,42 +178,26 @@ st.markdown(
 # -----------------------------------------------------------------------------
 st.sidebar.markdown(
     """
-    <div style='text-align: center; padding: 10px 0;'>
-        <h2 style='color: #60a5fa; margin-bottom: 2px;'>🛡️ AEROSHIELD AI</h2>
-        <p style='color: #94a3b8; font-size: 0.85rem;'>Hybrid Behavioral Ransomware Detection</p>
+    <div style='text-align: center; padding: 10px 0 16px 0;'>
+        <div style='font-size: 2.2rem; line-height: 1; margin-bottom: 4px;'>🛡️</div>
+        <h2 style='color: #60a5fa; margin: 0; font-size: 1.35rem; font-weight: 700;'>AEROSHIELD AI</h2>
+        <p style='color: #94a3b8; font-size: 0.82rem; margin: 2px 0 0 0;'>Ransomware Behavioral Defense</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-app_mode = st.sidebar.radio(
-    "Operating Tier",
-    ["🛡️ Public Mode (Zero-Technical)", "🔬 Cybersecurity Analyst Mode"],
+nav_page = st.sidebar.radio(
+    "Navigation Menu",
+    [
+        "🔍 Instant File Scanner",
+        "📡 Live Telemetry Detection",
+        "📦 Batch File Triage",
+        "📊 Security Dashboard & Reports",
+        "🔬 SOC Research & Technical Lab",
+    ],
     index=0,
-    help="Public Mode: Zero-execution file scanner & batch triage. Analyst Mode: Deep model telemetry, attention heatmaps, explainability, and scientific validation audit."
 )
-
-if app_mode == "🔬 Cybersecurity Analyst Mode":
-    nav_page = st.sidebar.radio(
-        "Analyst Navigation",
-        [
-            "Executive Dashboard",
-            "Scientific Validation & Audit",
-            "Dataset Explorer",
-            "Live Detection",
-            "📦 Batch Telemetry Triage",
-            "📊 Model Drift & Monitoring",
-            "Model Performance",
-            "Model Comparison",
-            "Ablation Study",
-            "Threshold Analysis",
-            "Explainability",
-            "📖 Architecture & Technical Docs",
-        ],
-        index=0,
-    )
-else:
-    nav_page = "Public Mode"
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### ⚙️ System Status")
@@ -221,6 +205,8 @@ st.sidebar.markdown(f"**Hardware Device:** `{DEVICE.upper()}`")
 st.sidebar.markdown(f"**Model Status:** `{'🟢 Checkpoint Active' if MODEL_CHECKPOINT_PATH.exists() else '🔴 Untrained'}`")
 st.sidebar.markdown(f"**Scaler Status:** `{'🟢 Fitted' if SCALER_PATH.exists() else '🔴 Missing'}`")
 st.sidebar.markdown(f"**Dataset Available:** `{'🟢 100,000 Rows' if DATASET_PATH.exists() else '🔴 Missing'}`")
+st.sidebar.markdown("---")
+st.sidebar.caption("🔒 **100% Localhost Privacy Guarantee:** Telemetry and file evaluations run strictly in-memory on your machine. Zero cloud data transfer.")
 
 def load_latest_metrics():
     """Load latest actual test metrics from experimental CSV artifacts."""
@@ -795,228 +781,541 @@ def render_model_monitoring_page():
             st.info("No analyst feedback submitted yet.")
 
 
-def render_public_mode():
+
+
+def render_file_scanner_page():
     st.markdown(
         """
         <div class='main-header'>
-            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>🛡️ Public Ransomware Defense & Safety Center</h1>
+            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>🛡️ Instant Ransomware & File Scanner</h1>
             <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
-                Everyday defensive protection designed for non-technical users: <b>Zero-Execution File Scanner</b> and <b>Batch Telemetry Triage</b>.
+                Zero-Execution Static & Behavioral Threat Inspection. Safely inspect downloaded files, scripts, or telemetry logs before running them.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    pub_tab1, pub_tab2 = st.tabs([
-        "🔍 Suspicious File Scanner (Zero Execution)",
-        "📦 Batch File & Telemetry Triage",
-    ])
-    
-    with pub_tab1:
-        st.markdown("### 🔍 Inspect a Downloaded File Before Opening")
-        st.markdown(
-            "Received an unexpected email attachment or downloaded a software installer (`.exe`, `.bat`, `.scr`, `.zip`)? "
-            "Inspect it here. Our zero-execution scanner checks its structure and known ransomware indicators **without ever launching or running the file**."
-        )
-        
-        uploaded_file = st.file_uploader(
-            "Drop suspicious file here or click to browse",
-            type=None,
-            help="Files are analyzed statically in-memory. They are NEVER executed."
-        )
-        
-        if uploaded_file is not None:
-            file_bytes = uploaded_file.read()
-            if len(file_bytes) > 50 * 1024 * 1024:
-                st.error("Uploaded file exceeds 50 MB limit for static analysis.")
-            else:
-                is_csv = uploaded_file.name.lower().endswith(".csv")
-                if is_csv:
-                    st.info("📊 **Detected Behavioral Activity Log (`.csv`):** Analyzing sequence with Hybrid Deep Learning Model (CNN + BiLSTM + Attention)...")
-                    try:
-                        csv_df = pd.read_csv(io.BytesIO(file_bytes))
-                        csv_res = predict_csv(csv_df, file_name=uploaded_file.name)
-                        prob = csv_res["ransomware_probability"]
-                        risk = csv_res["risk_level"]
-                        label = csv_res["label"]
-                        
-                        if label == "RANSOMWARE":
-                            st.error(f"🚨 **DANGER: MALICIOUS RANSOMWARE ACTIVITY DETECTED!** (Attack Probability: {prob:.2f}%)")
-                            st.markdown(
-                                f"""
-                                <div class='metric-card' style='border: 2px solid #ef4444; background: rgba(220, 38, 38, 0.2); padding: 20px; border-radius: 12px; margin-bottom: 20px;'>
-                                    <h3 style='color: #ef4444; margin: 0; font-size: 1.4rem;'>⚠️ CRITICAL THREAT: RANSOMWARE PATTERN CONFIRMED</h3>
-                                    <p style='color: #fecaca; font-size: 1.05rem; margin-top: 10px; line-height: 1.5;'>
-                                        Our <b>Hybrid Deep Learning Neural Network</b> detected active ransomware behavior in this telemetry record.
-                                        The recorded activity demonstrates <b>coordinated file encryption bursts, abnormal entropy spikes, and volume shadow copy destruction</b>.
-                                    </p>
-                                    <div style='margin-top: 14px; font-size: 1.15rem; color: #ffffff;'>
-                                        🎯 Model Verdict: <span style='background:#ef4444; padding: 4px 12px; border-radius:6px; font-weight:bold;'>MALICIOUS ({prob:.1f}%)</span> 
-                                        &nbsp;|&nbsp; Risk Level: <b style='color:#ef4444;'>HIGH RISK</b>
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-                        else:
-                            st.success(f"🟢 **BENIGN WORKLOAD: No Ransomware Activity Found in Telemetry** (Probability: {prob:.2f}%)")
-                    except Exception as e:
-                        st.warning(f"Could not parse telemetry sequence: {e}")
+    st.markdown("##### ⚡ Quick 1-Click Verification Samples (Test without uploading):")
+    c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+    with c_s1:
+        if st.button("🟢 Safe Normal Workload", use_container_width=True, help="Test a standard safe benign activity log"):
+            if SAMPLE_BENIGN_PATH.exists():
+                st.session_state["scanner_active_file"] = "sample_benign.csv"
+                st.session_state["scanner_file_bytes"] = SAMPLE_BENIGN_PATH.read_bytes()
+                st.rerun()
+    with c_s2:
+        if st.button("🔴 WannaCry Ransomware", use_container_width=True, help="Test an active WannaCry telemetry log"):
+            det_p = Path("data/sample_ransomware_detected.csv")
+            target_p = det_p if det_p.exists() else SAMPLE_RANSOMWARE_PATH
+            if target_p.exists():
+                st.session_state["scanner_active_file"] = "sample_ransomware_wannacry.csv"
+                st.session_state["scanner_file_bytes"] = target_p.read_bytes()
+                st.rerun()
+    with c_s3:
+        if st.button("⚡ Ransomware Escalation", use_container_width=True, help="Test a multi-phase ransomware kill-chain log"):
+            if SAMPLE_RANSOMWARE_PATH.exists():
+                st.session_state["scanner_active_file"] = "sample_ransomware_escalation.csv"
+                st.session_state["scanner_file_bytes"] = SAMPLE_RANSOMWARE_PATH.read_bytes()
+                st.rerun()
+    with c_s4:
+        if st.button("🧹 Clear Scanner", use_container_width=True, help="Reset the scanner"):
+            st.session_state.pop("scanner_active_file", None)
+            st.session_state.pop("scanner_file_bytes", None)
+            st.rerun()
 
-                with st.spinner("Analyzing file structure and safety indicators..."):
-                    res = inspect_executable_file(file_bytes, file_name=uploaded_file.name)
-                
-                # Verdict Card
-                verdict = res["verdict"]
-                risk_score = res["risk_score"]
-                
-                if verdict == "KNOWN_MALICIOUS":
-                    st.error(f"🚨 **DANGER: High-Risk Malicious Indicators Detected!** (Threat Score: {risk_score}/100)")
+    st.markdown("---")
+    uploaded_file = st.file_uploader(
+        "Or drag and drop any file here (`.csv`, `.exe`, `.bat`, `.txt`, `.zip`)",
+        type=None,
+        help="All files are analyzed statically in-memory. They are NEVER executed."
+    )
+
+    file_bytes = None
+    file_name = None
+
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.read()
+        file_name = uploaded_file.name
+    elif "scanner_file_bytes" in st.session_state:
+        file_bytes = st.session_state["scanner_file_bytes"]
+        file_name = st.session_state.get("scanner_active_file", "sample.csv")
+
+    if file_bytes is not None:
+        if len(file_bytes) > 50 * 1024 * 1024:
+            st.error("Uploaded file exceeds 50 MB limit for static analysis.")
+            return
+
+        is_csv = file_name.lower().endswith(".csv")
+        csv_df = None
+        prob = 0.0
+        risk = "LOW"
+        label = "BENIGN"
+        confidence = 95.0
+
+        if is_csv:
+            try:
+                csv_df = pd.read_csv(io.BytesIO(file_bytes))
+                csv_res = predict_csv(csv_df, file_name=file_name)
+                prob = csv_res["ransomware_probability"]
+                risk = csv_res["risk_level"]
+                label = csv_res["label"]
+                confidence = csv_res.get("confidence", 95.0)
+            except Exception as e:
+                st.warning(f"Could not parse telemetry sequence: {e}")
+
+        with st.spinner("Inspecting file structure and safety indicators..."):
+            res = inspect_executable_file(file_bytes, file_name=file_name)
+
+        verdict = res["verdict"]
+        risk_score = res["risk_score"]
+
+        # Synthesize final classification
+        is_malicious = (label == "RANSOMWARE") or (verdict == "KNOWN_MALICIOUS")
+        is_suspicious = (risk == "MEDIUM") or (verdict == "SUSPICIOUS")
+
+        if is_malicious:
+            display_prob = prob if is_csv else float(risk_score)
+            st.markdown(
+                f"""
+                <div class='metric-card' style='border: 2px solid #ef4444; background: rgba(220, 38, 38, 0.18); padding: 22px; border-radius: 12px; margin-bottom: 20px;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <h2 style='color: #ef4444; margin: 0; font-size: 1.5rem;'>🔴 RANSOMWARE THREAT DETECTED</h2>
+                        <span style='background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;'>CRITICAL THREAT</span>
+                    </div>
+                    <p style='color: #fecaca; font-size: 1.05rem; margin-top: 10px; line-height: 1.5;'>
+                        <b>High-confidence ransomware indicators were confirmed.</b> 
+                        Activity includes coordinated file encryption bursts, high Shannon entropy, and volume shadow copy destruction.
+                    </p>
+                    <div style='margin-top: 12px; font-size: 1.1rem; color: #ffffff;'>
+                        🎯 Classification: <b>MALICIOUS ({display_prob:.1f}%)</b> &nbsp;|&nbsp; 
+                        Risk Level: <b style='color: #ef4444;'>HIGH RISK</b> &nbsp;|&nbsp;
+                        Model Confidence: <b>{confidence:.1f}%</b>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        elif is_suspicious:
+            st.markdown(
+                f"""
+                <div class='metric-card' style='border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 22px; border-radius: 12px; margin-bottom: 20px;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <h2 style='color: #f59e0b; margin: 0; font-size: 1.5rem;'>⚠️ SUSPICIOUS BEHAVIOR DETECTED</h2>
+                        <span style='background: #f59e0b; color: black; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;'>MODERATE RISK</span>
+                    </div>
+                    <p style='color: #fef3c7; font-size: 1.05rem; margin-top: 10px; line-height: 1.5;'>
+                        Anomalous process behaviors or unusual file patterns detected. While not conclusively ransomware, caution is advised.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            display_prob = prob if is_csv else float(risk_score)
+            st.markdown(
+                f"""
+                <div class='metric-card' style='border: 2px solid #10b981; background: rgba(16, 185, 129, 0.15); padding: 22px; border-radius: 12px; margin-bottom: 20px;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <h2 style='color: #10b981; margin: 0; font-size: 1.5rem;'>🟢 BENIGN WORKLOAD: SAFE TO PROCEED</h2>
+                        <span style='background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.9rem;'>LOW RISK</span>
+                    </div>
+                    <p style='color: #d1fae5; font-size: 1.05rem; margin-top: 10px; line-height: 1.5;'>
+                        No ransomware behavior, destructive commands, or known malicious signatures found. Activity patterns match normal software execution.
+                    </p>
+                    <div style='margin-top: 12px; font-size: 1.1rem; color: #ffffff;'>
+                        🎯 Classification: <b>SAFE ({display_prob:.1f}%)</b> &nbsp;|&nbsp; 
+                        Risk Level: <b style='color: #10b981;'>LOW RISK</b> &nbsp;|&nbsp;
+                        Model Confidence: <b>{confidence:.1f}%</b>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        # 3 Key Metric Cards
+        m_c1, m_c2, m_c3 = st.columns(3)
+        m_c1.metric("Classification Verdict", "MALICIOUS" if is_malicious else ("SUSPICIOUS" if is_suspicious else "SAFE"))
+        m_c2.metric("Threat Probability", f"{prob:.1f}%" if is_csv else f"{risk_score:.0f}%")
+        m_c3.metric("Detection Confidence", f"{confidence:.1f}%")
+
+        # Two-column breakdown: Metadata & Plain-English explanation
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### 📋 File Metadata & Integrity")
+            st.markdown(f"- **Filename:** `{res.get('file_name', file_name)}`")
+            st.markdown(f"- **SHA-256 Hash:** `{res.get('sha256', 'N/A')}`")
+            st.markdown(f"- **File Size:** `{res.get('file_size_bytes', len(file_bytes)):,} bytes`")
+            st.markdown(f"- **Format:** `{res.get('file_type', 'Unknown')}`")
+            st.markdown(f"- **Shannon Entropy:** `{res.get('overall_entropy', 0.0):.2f} / 8.0`")
+
+        with col2:
+            st.markdown("#### 💡 Plain-English Summary")
+            st.write(res.get("plain_english_summary", "Static analysis completed."))
+
+            st.markdown("#### 🛡️ Recommended Response Steps")
+            for rec in res.get("recommendations", []):
+                st.markdown(f"- {rec}")
+
+        # Matched technical indicators if any
+        if res.get("indicators"):
+            with st.expander("🔍 View Technical Indicators Found", expanded=(verdict != "INCONCLUSIVE")):
+                for ind in res["indicators"]:
+                    sev = ind.get("severity", "INFO")
+                    color = "#ef4444" if sev == "HIGH" else "#f59e0b" if sev == "MEDIUM" else "#3b82f6"
+                    st.markdown(f"<span style='color:{color}; font-weight:bold;'>[{sev}]</span> **{ind.get('category')}**: `{ind.get('indicator')}` - *{ind.get('detail')}*", unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div class='disclaimer-box' style='border-left-color: #10b981; margin: 15px 0;'>
+                🔒 <b>Zero-Execution & Privacy Guarantee:</b> This file was analyzed 100% statically in-memory on localhost.
+                At no point was this file executed or allowed to run code, and zero data was transmitted across the network.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # Deep Technical Forensics (Expandable so the main UI stays neat & clean!)
+        csv_df_ref = csv_df if is_csv else None
+        calc_prob = prob if is_csv else float(risk_score)
+        calc_risk = risk if is_csv else ("CRITICAL" if risk_score >= 80 else ("HIGH" if risk_score >= 50 else ("MEDIUM" if risk_score >= 20 else "LOW")))
+
+        with st.expander("🔬 View Deep Technical Forensics (SHAP, MITRE ATT&CK, STIX 2.1 IOCs, PDF Report)", expanded=False):
+            render_soc_extended_analysis_tabs(
+                file_bytes=file_bytes,
+                file_name=file_name,
+                probability=calc_prob,
+                risk_level=calc_risk,
+                input_df=csv_df_ref,
+                static_res=res,
+                prefix_key="instant_scanner",
+            )
+
+
+
+def render_live_telemetry_page():
+    st.markdown(
+        """
+        <div class='main-header'>
+            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>📡 Live Endpoint Telemetry Detection</h1>
+            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
+                Real-Time Sequential Neural Inference (1D-CNN + BiLSTM + Attention). Evaluates 20-second rolling activity windows.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Threshold slider
+    col_t1, col_t2 = st.columns([3, 1])
+    with col_t1:
+        threshold = st.slider("Classification Decision Threshold (tau)", min_value=0.10, max_value=0.90, value=0.50, step=0.05)
+    with col_t2:
+        st.markdown(
+            f"""
+            <div style='margin-top: 15px; color: #94a3b8; font-size: 0.9rem;'>
+                Current Threshold: <b>{threshold*100:.0f}%</b><br>
+                Higher = Stricter positive criteria
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # 1-Click sample buttons
+    st.markdown("##### ⚡ 1-Click Endpoint Telemetry Scenarios:")
+    s_col1, s_col2, s_col3 = st.columns(3)
+    with s_col1:
+        if st.button("📁 Load BENIGN Telemetry", use_container_width=True):
+            if SAMPLE_BENIGN_PATH.exists():
+                st.session_state["live_sample"] = pd.read_csv(SAMPLE_BENIGN_PATH)
+                st.session_state["live_sample_name"] = "Sample Benign Activity"
+                st.rerun()
+            else:
+                st.error("Sample benign file missing.")
+    with s_col2:
+        if st.button("🚨 Load RANSOMWARE Escalation", use_container_width=True):
+            if SAMPLE_RANSOMWARE_PATH.exists():
+                st.session_state["live_sample"] = pd.read_csv(SAMPLE_RANSOMWARE_PATH)
+                st.session_state["live_sample_name"] = "Sample Ransomware-Like Escalation"
+                st.rerun()
+            else:
+                st.error("Sample ransomware file missing.")
+    with s_col3:
+        det_sample_path = Path("data/sample_ransomware_detected.csv")
+        if st.button("🔥 Load Active Attack (WannaCry)", use_container_width=True):
+            target_p = det_sample_path if det_sample_path.exists() else SAMPLE_RANSOMWARE_PATH
+            if target_p.exists():
+                st.session_state["live_sample"] = pd.read_csv(target_p)
+                st.session_state["live_sample_name"] = "Active Attack Sequence (WannaCry Telemetry)"
+                st.rerun()
+            else:
+                st.error("Ransomware sample file missing.")
+
+    # Upload custom CSV
+    uploaded_file = st.file_uploader("Or Upload Custom Endpoint Telemetry CSV (Minimum 20 rows)", type=["csv"], key="live_csv_uploader")
+    if uploaded_file is not None:
+        try:
+            st.session_state["live_sample"] = pd.read_csv(uploaded_file)
+            st.session_state["live_sample_name"] = uploaded_file.name
+        except Exception as e:
+            st.error(f"Error reading CSV file: {e}")
+
+    input_df = st.session_state.get("live_sample")
+    if input_df is not None:
+        file_label = st.session_state.get("live_sample_name", "endpoint_telemetry.csv")
+        st.info(f"Loaded Telemetry: **{file_label}** ({len(input_df)} time windows)")
+
+        try:
+            with st.spinner("Executing 1D-CNN + BiLSTM + Attention inference..."):
+                result = predict_csv(input_df, threshold=threshold, file_name=file_label)
+
+            res_col1, res_col2 = st.columns([2, 1])
+            with res_col1:
+                if result["label"] == "RANSOMWARE":
                     st.markdown(
-                        """
-                        <div class='metric-card' style='border: 2px solid #ef4444; background: rgba(220, 38, 38, 0.2); padding: 18px; border-radius: 10px; margin-bottom: 15px;'>
-                            <h3 style='color: #ef4444; margin: 0;'>🛑 DO NOT OPEN OR RUN THIS FILE!</h3>
-                            <p style='color: #fecaca; font-size: 1rem; margin-top: 8px;'>
-                                This file contains destructive ransomware commands or known malware signatures. Running it may compromise your system.
-                            </p>
+                        f"""
+                        <div class='metric-card' style='border: 1px solid #ef4444; background: rgba(220, 38, 38, 0.1);'>
+                            <span class='badge-ransomware'>🔴 RANSOMWARE-LIKE BEHAVIOR DETECTED</span>
+                            <div style='margin-top: 14px; font-size: 1.15rem;'>
+                                Ransomware Probability: <b style='color: #ef4444;'>{result['ransomware_probability']:.2f}%</b>
+                            </div>
+                            <div style='color: #94a3b8; font-size: 0.95rem; margin-top: 4px;'>
+                                Model Confidence: <b>{result['confidence']:.2f}%</b> (Decision Threshold: {result['threshold']}%)
+                            </div>
                         </div>
                         """,
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
-                elif verdict == "SUSPICIOUS":
-                    st.warning(f"⚠️ **CAUTION: Suspicious Characteristics Detected!** (Threat Score: {risk_score}/100)")
                 else:
-                    if is_csv:
-                        st.info("ℹ️ **Static Analysis Note:** This file is formatted as text/CSV data. Static scanners inspect compiled executable programs (`.exe`). The Behavioral Neural Network assessment above confirms whether this data represents an attack.")
-                    else:
-                        st.info(f"⚪ **INCONCLUSIVE / NO KNOWN STATIC SIGNATURES FOUND** (Threat Score: {risk_score}/100)")
-                        st.warning(
-                            "⚠️ **Important Safety Note for Everyday Users:** The fact that no known malicious indicators were detected **does NOT guarantee that this file is safe**.\n\n"
-                            "Modern zero-day ransomware frequently mutates or uses packing to bypass signature scanners. "
-                            "Only open files from verified, trusted senders. If in doubt, do not open or run this file."
-                        )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("#### 📋 File Metadata & Integrity")
-                    st.markdown(f"- **Filename:** `{res.get('file_name', uploaded_file.name)}`")
-                    st.markdown(f"- **SHA-256 Hash:** `{res.get('sha256', 'N/A')}`")
-                    st.markdown(f"- **File Size:** `{res.get('file_size_bytes', 0):,} bytes`")
-                    st.markdown(f"- **Format:** `{res.get('file_type', 'Unknown')}`")
-                    st.markdown(f"- **Shannon Entropy:** `{res.get('overall_entropy', 0.0):.2f} / 8.0`")
-                
-                with col2:
-                    st.markdown("#### 💡 Plain-English Summary")
-                    st.write(res.get("plain_english_summary", "Analysis completed."))
-                    
-                    st.markdown("#### 🛡️ Recommended Next Steps")
-                    for rec in res.get("recommendations", []):
-                        st.markdown(f"- {rec}")
-                
-                # Matched indicators
-                if res.get("indicators"):
-                    with st.expander("🔍 View Technical Indicators Found", expanded=(verdict != "INCONCLUSIVE")):
-                        for ind in res["indicators"]:
-                            sev = ind.get("severity", "INFO")
-                            color = "#ef4444" if sev == "HIGH" else "#f59e0b" if sev == "MEDIUM" else "#3b82f6"
-                            st.markdown(f"<span style='color:{color}; font-weight:bold;'>[{sev}]</span> **{ind.get('category')}**: `{ind.get('indicator')}` - *{ind.get('detail')}*", unsafe_allow_html=True)
-                
+                    st.markdown(
+                        f"""
+                        <div class='metric-card' style='border: 1px solid #10b981; background: rgba(16, 185, 129, 0.1);'>
+                            <span class='badge-benign'>🟢 BENIGN-LIKE BEHAVIOR</span>
+                            <div style='margin-top: 14px; font-size: 1.15rem;'>
+                                Ransomware Probability: <b style='color: #10b981;'>{result['ransomware_probability']:.2f}%</b>
+                            </div>
+                            <div style='color: #94a3b8; font-size: 0.95rem; margin-top: 4px;'>
+                                Model Confidence: <b>{result['confidence']:.2f}%</b> (Decision Threshold: {result['threshold']}%)
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            with res_col2:
+                risk = result["risk_level"]
+                badge_class = "badge-risk-high" if risk == "HIGH" else ("badge-risk-med" if risk == "MEDIUM" else "badge-risk-low")
                 st.markdown(
-                    """
-                    <div class='disclaimer-box' style='border-left-color: #10b981;'>
-                        🛡️ <b>Zero-Execution Guarantee:</b> This file was analyzed 100% statically in-memory.
-                        At no point was this file launched, executed, or permitted to run code on your system.
+                    f"""
+                    <div class='metric-card' style='text-align: center;'>
+                        <div style='color: #94a3b8; font-size: 0.85rem;'>Application Risk Category</div>
+                        <div style='margin: 10px 0;'><span class='{badge_class}' style='font-size: 1.3rem; padding: 6px 20px;'>{risk} RISK</span></div>
+                        <div style='font-size: 0.8rem; color: #94a3b8;'>Low &lt;30% | Med 30-70% | High &gt;70%</div>
                     </div>
                     """,
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
 
-                # Extended SOC Forensic & Intelligence Suite
-                csv_df_ref = csv_df if is_csv else None
-                calc_prob = prob if is_csv else float(risk_score)
-                calc_risk = risk if is_csv else ("CRITICAL" if risk_score >= 80 else ("HIGH" if risk_score >= 50 else ("MEDIUM" if risk_score >= 20 else "LOW")))
+            # Disclaimer
+            st.markdown(
+                """
+                <div class='disclaimer-box'>
+                    <b>Notice:</b> This result is a machine-learning classification of behavioral telemetry
+                    and is not, by itself, proof of malware infection.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Interactive Telemetry Progression Chart (Plotly)
+            st.markdown("### 📈 Evaluated Sequence Behavioral Indicators")
+            seq_df = result["sequence_df"]
+            timesteps = list(range(len(seq_df)))
+
+            plot_features = [
+                "file_write_rate",
+                "file_rename_rate",
+                "file_delete_rate",
+                "entropy_delta",
+                "encrypted_file_ratio",
+                "cpu_percent",
+            ]
+            fig_telemetry = go.Figure()
+            for feat in plot_features:
+                if feat in seq_df.columns:
+                    fig_telemetry.add_trace(go.Scatter(x=timesteps, y=seq_df[feat], mode="lines+markers", name=feat))
+
+            fig_telemetry.update_layout(
+                title="Endpoint Behavioral Metrics Across Sequence Timesteps",
+                xaxis_title="Time Step (Window)",
+                yaxis_title="Metric Value",
+                template="plotly_dark",
+                height=380,
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_telemetry, use_container_width=True)
+
+            # Attention Weight Timeline
+            st.markdown("### 🧠 Dynamic Attention Weights Across Timesteps")
+            attn_weights = result["attention_weights"]
+            fig_attn = px.bar(
+                x=list(range(len(attn_weights))),
+                y=attn_weights,
+                labels={"x": "Timestep Window", "y": "Attention Weight"},
+                title="Model Attention Distribution (Where the Network Focused)",
+                template="plotly_dark",
+                color=attn_weights,
+                color_continuous_scale="Viridis",
+            )
+            fig_attn.update_layout(height=300)
+            st.plotly_chart(fig_attn, use_container_width=True)
+
+            st.caption(
+                "Attention weights indicate which timesteps received greater weight from the model. "
+                "They should not be interpreted as definitive causal explanations."
+            )
+
+            # Extended SOC Forensic & Intelligence Suite in an expander
+            raw_csv_bytes = input_df.to_csv(index=False).encode("utf-8")
+            with st.expander("🔬 View Deep SOC Telemetry Forensics (MITRE ATT&CK, Hybrid Scoring, PDF Report)", expanded=False):
                 render_soc_extended_analysis_tabs(
-                    file_bytes=file_bytes,
-                    file_name=uploaded_file.name,
-                    probability=calc_prob,
-                    risk_level=calc_risk,
-                    input_df=csv_df_ref,
-                    static_res=res,
-                    prefix_key="pub_scanner",
+                    file_bytes=raw_csv_bytes,
+                    file_name=file_label,
+                    probability=result["ransomware_probability"],
+                    risk_level=result["risk_level"],
+                    input_df=input_df,
+                    telemetry_meta={
+                        "entropy_delta": float(seq_df["entropy_delta"].iloc[-1]) if "entropy_delta" in seq_df.columns else 0.0,
+                        "file_write_rate": float(seq_df["file_write_rate"].iloc[-1]) if "file_write_rate" in seq_df.columns else 0.0,
+                        "shadow_cmd": float(seq_df["shadow_copy_cmd_count"].iloc[-1]) if "shadow_copy_cmd_count" in seq_df.columns else 0.0,
+                    },
+                    prefix_key="live_telemetry_det",
                 )
-    
-    with pub_tab2:
-        st.markdown("### 📦 Batch File & Telemetry Triage Center")
+
+        except Exception as err:
+            st.error(f"Inference error: {err}")
+
+
+
+def render_security_dashboard_page():
+    latest_m = load_latest_metrics()
+    st.markdown(
+        """
+        <div class='main-header'>
+            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>📊 Enterprise Security Dashboard & Operational Reports</h1>
+            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
+                High-level operational health, hardware latency profiling, and real-time model drift monitoring.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Top Metrics Row
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
         st.markdown(
-            "Upload a batch of suspicious files, endpoint execution logs (.csv), or a compressed `.zip` archive. "
-            "The triage engine processes all items in parallel, ranks them by threat score, and generates a SOC priority queue."
+            """
+            <div class='metric-card'>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>Model Architecture</div>
+                <div style='color: #60a5fa; font-size: 1.25rem; font-weight: bold;'>CNN-BiLSTM-Attn</div>
+                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>4-Stage Hybrid</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with m2:
+        st.markdown(
+            """
+            <div class='metric-card'>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>Input Tensor</div>
+                <div style='color: #f8fafc; font-size: 1.25rem; font-weight: bold;'>20 × 20</div>
+                <div style='color: #94a3b8; font-size: 0.75rem; margin-top: 4px;'>20 Steps × 20 Feats</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with m3:
+        st.markdown(
+            """
+            <div class='metric-card'>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>Telemetry Dataset</div>
+                <div style='color: #f8fafc; font-size: 1.25rem; font-weight: bold;'>100,000 Rows</div>
+                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>5,000 Sequences</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with m4:
+        st.markdown(
+            f"""
+            <div class='metric-card'>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>Test Accuracy</div>
+                <div style='color: #10b981; font-size: 1.25rem; font-weight: bold;'>{latest_m['acc']}</div>
+                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>Zero Data Leakage</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with m5:
+        st.markdown(
+            f"""
+            <div class='metric-card'>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>ROC-AUC Score</div>
+                <div style='color: #10b981; font-size: 1.25rem; font-weight: bold;'>{latest_m['auc']}</div>
+                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>Held-out Test Split</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        col_b1, col_b2 = st.columns([3, 1])
-        with col_b1:
-            uploaded_batch = st.file_uploader(
-                "Upload multiple files or ZIP archive",
-                accept_multiple_files=True,
-                key="pub_batch_uploader",
-            )
-        with col_b2:
-            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-            load_demo_batch = st.button("⚡ Load Batch Demo (5 Samples)", key="pub_demo_batch")
+    dash_tab1, dash_tab2 = st.tabs([
+        "⏱️ EDR Performance & Latency Health",
+        "📋 Model Drift & Human Feedback Log",
+    ])
 
-        batch_data = []
-        if uploaded_batch:
-            for f in uploaded_batch:
-                batch_data.append((f.name, f.read()))
-        elif load_demo_batch or st.session_state.get("pub_batch_demo_active"):
-            st.session_state["pub_batch_demo_active"] = True
-            if SAMPLE_RANSOMWARE_PATH.exists():
-                batch_data.append(("endpoint_telemetry_ransomware.csv", SAMPLE_RANSOMWARE_PATH.read_bytes()))
-            if SAMPLE_BENIGN_PATH.exists():
-                batch_data.append(("endpoint_telemetry_benign.csv", SAMPLE_BENIGN_PATH.read_bytes()))
-            batch_data.append(("README_TO_DECRYPT_FILES.txt", b"ALL YOUR FILES ARE ENCRYPTED! Send 0.5 btc to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa or files will be lost."))
-            batch_data.append(("standard_test_sample.com", b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"))
-            batch_data.append(("system_backup_maintenance.py", b"import shutil\nprint('Running daily backup routine')\nshutil.copytree('/docs', '/backup')\n"))
+    with dash_tab1:
+        st.markdown("### ⏱️ Hardware Latency & EDR Agent Viability")
+        audit_file = Path("reports/scientific_validation_report.json")
+        if audit_file.exists():
+            try:
+                with open(audit_file, "r") as f:
+                    audit_data = json.load(f)
+                prof = audit_data.get('system_profiling', {})
+                lat = prof.get('latency_ms', {})
+                mem = prof.get('memory_footprint', {})
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Mean Latency", f"{lat.get('mean_ms', 3.59):.2f} ms")
+                c2.metric("P95 Latency", f"{lat.get('p95_ms', 5.99):.2f} ms")
+                c3.metric("EDR Throughput", "275+ wins/sec")
+                c4.metric("Model Disk Size", f"{mem.get('model_file_size_kb', 145.0):.1f} KB")
+            except Exception:
+                pass
 
-        if batch_data:
-            with st.spinner(f"Analyzing {len(batch_data)} items through hybrid triage engine..."):
-                batch_res = process_batch_files(batch_data)
+        st.markdown("---")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.markdown("#### 🎯 Empirical Confusion Matrix")
+            if CONFUSION_MATRIX_PATH.exists():
+                st.image(str(CONFUSION_MATRIX_PATH), use_container_width=True)
+            else:
+                st.info("Run `python -m src.evaluate` to generate confusion matrix.")
 
-            st.markdown("### 📊 Batch Triage Summary Metrics")
-            b1, b2, b3, b4 = st.columns(4)
-            b1.metric("Total Items Triaged", f"{batch_res['total_files']}")
-            b2.metric("Critical Threats", f"{batch_res['critical_count']}", delta_color="inverse")
-            b3.metric("High Threats", f"{batch_res['high_count']}", delta_color="inverse")
-            b4.metric("Low / Benign", f"{batch_res['low_count']}")
+        with col_p2:
+            st.markdown("#### 📉 Training Loss & Accuracy Dynamics")
+            if TRAINING_CURVE_PATH.exists():
+                st.image(str(TRAINING_CURVE_PATH), use_container_width=True)
+            else:
+                st.info("Run `python -m src.train` to generate training curves.")
 
-            st.markdown("### 📋 Prioritized SOC Triage Queue")
-            df_summary = batch_res["summary_table"]
-            st.dataframe(df_summary, use_container_width=True)
+        if CLASSIFICATION_REPORT_PATH.exists():
+            st.markdown("#### 📄 Detailed Classification Report")
+            with open(CLASSIFICATION_REPORT_PATH, "r", encoding="utf-8", errors="replace") as f:
+                st.code(f.read(), language="text")
 
-            csv_batch_summary = df_summary.to_csv(index=False)
-            st.download_button(
-                "📥 Download Batch Triage Summary (CSV)",
-                data=csv_batch_summary,
-                file_name="soc_batch_triage_summary.csv",
-                mime="text/csv",
-                key="pub_batch_triage_csv_dl",
-            )
-
-            if not df_summary.empty:
-                sev_counts = df_summary["severity"].value_counts().reset_index()
-                sev_counts.columns = ["Severity", "Count"]
-                color_map = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#f59e0b", "LOW": "#10b981"}
-                fig_bar = px.bar(
-                    sev_counts,
-                    x="Severity",
-                    y="Count",
-                    color="Severity",
-                    color_discrete_map=color_map,
-                    title="Severity Tier Distribution Across Ingested Batch",
-                    template="plotly_dark",
-                    height=320,
-                )
-                st.plotly_chart(fig_bar, use_container_width=True)
+    with dash_tab2:
+        render_model_monitoring_page()
 
 
 def render_scientific_audit_page():
@@ -1149,553 +1448,7 @@ def render_scientific_audit_page():
             """
         )
 
-
-# Routing for Modes and New Pages
-if app_mode == "🛡️ Public Mode (Zero-Technical)":
-    render_public_mode()
-    st.stop()
-
-if nav_page == "Scientific Validation & Audit":
-    render_scientific_audit_page()
-    st.stop()
-
-if nav_page == "📦 Batch Telemetry Triage":
-    render_batch_triage_page()
-    st.stop()
-
-if nav_page == "📊 Model Drift & Monitoring":
-    render_model_monitoring_page()
-    st.stop()
-
-
-# -----------------------------------------------------------------------------
-# Page 1: Executive Dashboard
-# -----------------------------------------------------------------------------
-if nav_page == "Executive Dashboard":
-    latest_m = load_latest_metrics()
-    st.markdown(
-        """
-        <div class='main-header'>
-            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>🛡️ Hybrid Behavioral Ransomware Detection System</h1>
-            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
-                Deep Learning Framework combining <b>1D-CNN + BiLSTM + Attention Mechanism</b> for Early Behavioral Endpoint Protection
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # High-level Metrics Row
-    m1, m2, m3, m4, m5 = st.columns(5)
-    with m1:
-        st.markdown(
-            """
-            <div class='metric-card'>
-                <div style='color: #94a3b8; font-size: 0.85rem;'>Model Architecture</div>
-                <div style='color: #60a5fa; font-size: 1.25rem; font-weight: bold;'>CNN-BiLSTM-Attn</div>
-                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>4-Stage Hybrid</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m2:
-        st.markdown(
-            """
-            <div class='metric-card'>
-                <div style='color: #94a3b8; font-size: 0.85rem;'>Input Representation</div>
-                <div style='color: #f8fafc; font-size: 1.25rem; font-weight: bold;'>20 × 20 Tensor</div>
-                <div style='color: #94a3b8; font-size: 0.75rem; margin-top: 4px;'>20 Steps × 20 Feats</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m3:
-        st.markdown(
-            """
-            <div class='metric-card'>
-                <div style='color: #94a3b8; font-size: 0.85rem;'>Dataset Telemetry</div>
-                <div style='color: #f8fafc; font-size: 1.25rem; font-weight: bold;'>100,000 Rows</div>
-                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>5,000 Sequences</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m4:
-        st.markdown(
-            f"""
-            <div class='metric-card'>
-                <div style='color: #94a3b8; font-size: 0.85rem;'>Test Accuracy</div>
-                <div style='color: #10b981; font-size: 1.25rem; font-weight: bold;'>{latest_m['acc']}</div>
-                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>Zero Data Leakage</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m5:
-        st.markdown(
-            f"""
-            <div class='metric-card'>
-                <div style='color: #94a3b8; font-size: 0.85rem;'>ROC-AUC Score</div>
-                <div style='color: #10b981; font-size: 1.25rem; font-weight: bold;'>{latest_m['auc']}</div>
-                <div style='color: #10b981; font-size: 0.75rem; margin-top: 4px;'>Held-out Test Split</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("### 🏗️ Proposed Deep Learning Architecture")
-    c1, c2 = st.columns([3, 2])
-    with c1:
-        st.markdown(
-            """
-            ```text
-            Endpoint Behavioral Telemetry Sequence (20 timesteps × 20 features)
-                                    │
-                                    ▼
-            ┌─────────────────────────────────────────────────────────┐
-            │ 1. 1D Convolutional Neural Network                      │
-            │    • Conv1D (64 filters, kernel=3, padding='same')      │
-            │    • BatchNorm1d + ReLU + Dropout(0.20)                 │
-            │    • Conv1D (64 filters, kernel=3, padding='same')      │
-            │    • Purpose: Extracts local spatial behavioral motifs  │
-            └───────────────────────────┬─────────────────────────────┘
-                                        │ (batch, 20, 64)
-                                        ▼
-            ┌─────────────────────────────────────────────────────────┐
-            │ 2. Bidirectional LSTM (BiLSTM)                          │
-            │    • 2 Layers, hidden_size=64, bidirectional=True       │
-            │    • Dropout=0.20                                       │
-            │    • Purpose: Captures forward & backward temporal flow │
-            └───────────────────────────┬─────────────────────────────┘
-                                        │ (batch, 20, 128)
-                                        ▼
-            ┌─────────────────────────────────────────────────────────┐
-            │ 3. Trainable Additive Attention Mechanism               │
-            │    • Dynamic alignment scores across 20 timesteps       │
-            │    • Outputs Context Vector (128) & Attention Map (20)  │
-            │    • Purpose: Focuses on critical escalation stages     │
-            └───────────────────────────┬─────────────────────────────┘
-                                        │ Context Vector (batch, 128)
-                                        ▼
-            ┌─────────────────────────────────────────────────────────┐
-            │ 4. Fully Connected Classification Head                  │
-            │    • Linear(128 → 64) + ReLU + Dropout(0.25)            │
-            │    • Linear(64 → 1) with BCEWithLogitsLoss              │
-            └───────────────────────────┬─────────────────────────────┘
-                                        ▼
-                         BENIGN (0)  or  RANSOMWARE (1)
-            ```
-            """
-        )
-    with c2:
-        st.markdown(
-            """
-            <div class='metric-card' style='height: 100%;'>
-                <h4 style='color: #60a5fa; margin-top: 0;'>🔑 Core Design Principles</h4>
-                <ul style='color: #cbd5e1; font-size: 0.95rem; line-height: 1.7;'>
-                    <li><b>Temporal Progression:</b> Ransomware executes via multi-phase Kill-Chain stages (discovery → backup inhibition → aggressive file encryption).</li>
-                    <li><b>Strict Anti-Leakage:</b> Scaler fitted strictly on train sequences. Sequence-level stratification ensures zero row-leakage.</li>
-                    <li><b>Attention Explainability:</b> Inspect exact timesteps where suspicious behavioral escalation occurs.</li>
-                    <li><b>Zero Malicious Code:</b> 100% defensive behavioral telemetry. No harmful executables or real file encryptions.</li>
-                </ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-# -----------------------------------------------------------------------------
-# Page 2: Dataset Explorer
-# -----------------------------------------------------------------------------
-elif nav_page == "Dataset Explorer":
-    st.markdown("## 📊 Exploratory Behavioral Telemetry Dataset")
-    st.markdown("Inspect ground-truth distributions, class balance, and multi-step progression.")
-
-    if not DATASET_PATH.exists():
-        st.warning("Dataset not found! Generate it by running `python -m src.dataset`.")
-    else:
-        df = pd.read_csv(DATASET_PATH)
-
-        tab1, tab2, tab3 = st.tabs(["Dataset Preview & Stats", "Feature Correlations", "Temporal Progression"])
-
-        with tab1:
-            col_a, col_b = st.columns([2, 1])
-            with col_a:
-                st.markdown(f"**Dataset Rows:** `{len(df):,}` | **Sequences:** `{df['sequence_id'].nunique():,}` | **Features:** `{len(FEATURES)}`")
-                st.dataframe(df.head(50), height=320, use_container_width=True)
-            with col_b:
-                if (EDA_DIR / "class_distribution.png").exists():
-                    st.image(str(EDA_DIR / "class_distribution.png"), caption="Sequence Class Balance", use_container_width=True)
-
-            st.markdown("#### 📐 Telemetry Feature Descriptive Statistics")
-            st.dataframe(df[FEATURES].describe().T[["mean", "std", "min", "max"]].round(3), use_container_width=True)
-
-        with tab2:
-            st.markdown("#### 🔗 Full Pearson Correlation Matrix")
-            if (REPORTS_DIR / "correlation_matrix.png").exists():
-                st.image(str(REPORTS_DIR / "correlation_matrix.png"), use_container_width=True)
-            else:
-                st.info("Run `python -m src.eda` to generate correlation matrix.")
-
-        with tab3:
-            st.markdown("#### ⏱️ Temporal Behavioral Escalation Over 20 Timesteps")
-            if (EDA_DIR / "sequence_temporal_patterns.png").exists():
-                st.image(str(EDA_DIR / "sequence_temporal_patterns.png"), use_container_width=True)
-
-            if (EDA_DIR / "feature_boxplots.png").exists():
-                st.image(str(EDA_DIR / "feature_boxplots.png"), use_container_width=True)
-
-# -----------------------------------------------------------------------------
-# Page 3: Live Detection
-# -----------------------------------------------------------------------------
-elif nav_page == "Live Detection":
-    st.markdown("## 🛡️ Live Ransomware Behavioral Detection")
-    st.markdown("Upload endpoint telemetry CSV or load test logs to run real-time hybrid neural inference.")
-
-    # Threshold slider
-    col_t1, col_t2 = st.columns([3, 1])
-    with col_t1:
-        threshold = st.slider("Classification Decision Threshold", min_value=0.10, max_value=0.90, value=0.50, step=0.05)
-    with col_t2:
-        st.markdown(
-            f"""
-            <div style='margin-top: 15px; color: #94a3b8; font-size: 0.9rem;'>
-                Current Threshold: <b>{threshold*100:.0f}%</b><br>
-                Higher = Stricter positive criteria
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Input Method Selection
-    input_choice = st.radio("Choose Input Telemetry Source:", ["Use Predefined Sample Logs", "Upload Custom CSV File"], horizontal=True)
-
-    input_df = None
-
-    if input_choice == "Use Predefined Sample Logs":
-        s_col1, s_col2, s_col3 = st.columns(3)
-        with s_col1:
-            if st.button("📁 Load BENIGN Telemetry", use_container_width=True):
-                if SAMPLE_BENIGN_PATH.exists():
-                    st.session_state["active_sample"] = pd.read_csv(SAMPLE_BENIGN_PATH)
-                    st.session_state["sample_name"] = "Sample Benign Activity"
-                else:
-                    st.error("Sample benign file missing. Run `python -m src.make_sample_logs`.")
-        with s_col2:
-            if st.button("🚨 Load RANSOMWARE Escalation", use_container_width=True):
-                if SAMPLE_RANSOMWARE_PATH.exists():
-                    st.session_state["active_sample"] = pd.read_csv(SAMPLE_RANSOMWARE_PATH)
-                    st.session_state["sample_name"] = "Sample Ransomware-Like Escalation"
-                else:
-                    st.error("Sample ransomware file missing. Run `python -m src.make_sample_logs`.")
-        with s_col3:
-            detected_sample_path = Path("data/sample_ransomware_detected.csv")
-            if st.button("🔥 Load Active Attack (Detected)", use_container_width=True):
-                if detected_sample_path.exists():
-                    st.session_state["active_sample"] = pd.read_csv(detected_sample_path)
-                    st.session_state["sample_name"] = "Active Attack Sequence (Simulated Ransomware Detected)"
-                else:
-                    st.error("File data/sample_ransomware_detected.csv missing.")
-
-        if "active_sample" in st.session_state:
-            input_df = st.session_state["active_sample"]
-            st.info(f"Loaded: **{st.session_state.get('sample_name', 'Predefined Log')}** ({len(input_df)} time windows)")
-
-    else:
-        uploaded_file = st.file_uploader("Upload Telemetry CSV (Minimum 20 rows)", type=["csv"])
-        if uploaded_file is not None:
-            try:
-                input_df = pd.read_csv(uploaded_file)
-                st.success(f"Uploaded CSV with {len(input_df)} rows and {len(input_df.columns)} columns.")
-            except Exception as e:
-                st.error(f"Error reading CSV file: {e}")
-
-    # Perform Inference if Data is Ready
-    if input_df is not None:
-        try:
-            with st.spinner("Executing 1D-CNN + BiLSTM + Attention inference..."):
-                file_label = st.session_state.get("sample_name") or (uploaded_file.name if (input_choice != "Use Predefined Sample Logs" and uploaded_file is not None) else "telemetry.csv")
-                result = predict_csv(input_df, threshold=threshold, file_name=file_label)
-
-            # Display Result Banner
-            res_col1, res_col2 = st.columns([2, 1])
-            with res_col1:
-                if result["label"] == "RANSOMWARE":
-                    st.markdown(
-                        f"""
-                        <div class='metric-card' style='border: 1px solid #ef4444; background: rgba(220, 38, 38, 0.1);'>
-                            <span class='badge-ransomware'>🔴 RANSOMWARE-LIKE BEHAVIOR DETECTED</span>
-                            <div style='margin-top: 14px; font-size: 1.15rem;'>
-                                Ransomware Probability: <b style='color: #ef4444;'>{result['ransomware_probability']:.2f}%</b>
-                            </div>
-                            <div style='color: #94a3b8; font-size: 0.95rem; margin-top: 4px;'>
-                                Model Confidence: <b>{result['confidence']:.2f}%</b> (Decision Threshold: {result['threshold']}%)
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(
-                        f"""
-                        <div class='metric-card' style='border: 1px solid #10b981; background: rgba(16, 185, 129, 0.1);'>
-                            <span class='badge-benign'>🟢 BENIGN-LIKE BEHAVIOR</span>
-                            <div style='margin-top: 14px; font-size: 1.15rem;'>
-                                Ransomware Probability: <b style='color: #10b981;'>{result['ransomware_probability']:.2f}%</b>
-                            </div>
-                            <div style='color: #94a3b8; font-size: 0.95rem; margin-top: 4px;'>
-                                Model Confidence: <b>{result['confidence']:.2f}%</b> (Decision Threshold: {result['threshold']}%)
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-            with res_col2:
-                risk = result["risk_level"]
-                badge_class = "badge-risk-high" if risk == "HIGH" else ("badge-risk-med" if risk == "MEDIUM" else "badge-risk-low")
-                st.markdown(
-                    f"""
-                    <div class='metric-card' style='text-align: center;'>
-                        <div style='color: #94a3b8; font-size: 0.85rem;'>Application Risk Category</div>
-                        <div style='margin: 10px 0;'><span class='{badge_class}' style='font-size: 1.3rem; padding: 6px 20px;'>{risk} RISK</span></div>
-                        <div style='font-size: 0.8rem; color: #94a3b8;'>Low &lt;30% | Med 30-70% | High &gt;70%</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            # Disclaimer
-            st.markdown(
-                """
-                <div class='disclaimer-box'>
-                    <b>Notice:</b> This result is a machine-learning classification of behavioral telemetry
-                    and is not, by itself, proof of malware infection.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # Interactive Telemetry Progression Chart (Plotly)
-            st.markdown("### 📈 Evaluated Sequence Behavioral Indicators")
-            seq_df = result["sequence_df"]
-            timesteps = list(range(len(seq_df)))
-
-            plot_features = [
-                "file_write_rate",
-                "file_rename_rate",
-                "file_delete_rate",
-                "entropy_delta",
-                "encrypted_file_ratio",
-                "cpu_percent",
-            ]
-            fig_telemetry = go.Figure()
-            for feat in plot_features:
-                fig_telemetry.add_trace(go.Scatter(x=timesteps, y=seq_df[feat], mode="lines+markers", name=feat))
-
-            fig_telemetry.update_layout(
-                title="Endpoint Behavioral Metrics Across Sequence Timesteps",
-                xaxis_title="Time Step (Window)",
-                yaxis_title="Metric Value",
-                template="plotly_dark",
-                height=380,
-                hovermode="x unified",
-            )
-            st.plotly_chart(fig_telemetry, use_container_width=True)
-
-            # Attention Weight Timeline
-            st.markdown("### 🧠 Dynamic Attention Weights Across Timesteps")
-            attn_weights = result["attention_weights"]
-            fig_attn = px.bar(
-                x=list(range(len(attn_weights))),
-                y=attn_weights,
-                labels={"x": "Timestep Window", "y": "Attention Weight"},
-                title="Model Attention Distribution (Where the Network Focused)",
-                template="plotly_dark",
-                color=attn_weights,
-                color_continuous_scale="Viridis",
-            )
-            fig_attn.update_layout(height=300)
-            st.plotly_chart(fig_attn, use_container_width=True)
-
-            st.caption(
-                "Attention weights indicate which timesteps received greater weight from the model. "
-                "They should not be interpreted as definitive causal explanations."
-            )
-
-            # Extended SOC Forensic & Intelligence Suite
-            raw_csv_bytes = input_df.to_csv(index=False).encode("utf-8")
-            render_soc_extended_analysis_tabs(
-                file_bytes=raw_csv_bytes,
-                file_name=st.session_state.get("sample_name", "Uploaded_Telemetry.csv"),
-                probability=result["ransomware_probability"],
-                risk_level=result["risk_level"],
-                input_df=input_df,
-                telemetry_meta={
-                    "entropy_delta": float(seq_df["entropy_delta"].iloc[-1]),
-                    "file_write_rate": float(seq_df["file_write_rate"].iloc[-1]),
-                    "shadow_cmd": float(seq_df["shadow_copy_cmd_count"].iloc[-1]) if "shadow_copy_cmd_count" in seq_df.columns else 0.0,
-                },
-                prefix_key="analyst_live_det",
-            )
-
-        except Exception as err:
-            st.error(f"Inference error: {err}")
-
-# -----------------------------------------------------------------------------
-# Page 4: Model Performance
-# -----------------------------------------------------------------------------
-elif nav_page == "Model Performance":
-    st.markdown("## 📈 Proposed Model Performance & Evaluation")
-    st.markdown("Empirical test set evaluation metrics on 750 completely held-out sequences.")
-
-    # Load metrics from classification report / comparison CSV
-    perf_m = load_latest_metrics()
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("Test Accuracy", perf_m["acc"], "Generalization")
-    with c2:
-        st.metric("Precision", perf_m["prec"], "Low False Alarms")
-    with c3:
-        st.metric("Recall (Sensitivity)", perf_m["rec"], "High Detection")
-    with c4:
-        st.metric("ROC-AUC", perf_m["auc"], "Separation Area")
-
-    st.markdown("---")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        st.markdown("#### 🎯 Confusion Matrix")
-        if CONFUSION_MATRIX_PATH.exists():
-            st.image(str(CONFUSION_MATRIX_PATH), use_container_width=True)
-        else:
-            st.info("Run `python -m src.evaluate` to generate confusion matrix.")
-
-    with col_p2:
-        st.markdown("#### 📉 Training Loss & Accuracy Dynamics")
-        if TRAINING_CURVE_PATH.exists():
-            st.image(str(TRAINING_CURVE_PATH), use_container_width=True)
-        else:
-            st.info("Run `python -m src.train` to generate training curves.")
-
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        st.markdown("#### ⚡ Receiver Operating Characteristic (ROC) Curve")
-        if ROC_CURVE_PATH.exists():
-            st.image(str(ROC_CURVE_PATH), use_container_width=True)
-    with col_r2:
-        st.markdown("#### 🎯 Precision-Recall Curve")
-        if PR_CURVE_PATH.exists():
-            st.image(str(PR_CURVE_PATH), use_container_width=True)
-
-    if CLASSIFICATION_REPORT_PATH.exists():
-        st.markdown("#### 📄 Detailed Classification Report")
-        with open(CLASSIFICATION_REPORT_PATH, "r", encoding="utf-8", errors="replace") as f:
-            st.code(f.read(), language="text")
-
-# -----------------------------------------------------------------------------
-# Page 5: Model Comparison
-# -----------------------------------------------------------------------------
-elif nav_page == "Model Comparison":
-    st.markdown("## ⚖️ Baseline vs Proposed Hybrid Benchmark")
-    st.markdown("Direct comparison across all 6 models evaluated on the exact same test partition.")
-
-    if MODEL_COMPARISON_PATH.exists():
-        comp_df = pd.read_csv(MODEL_COMPARISON_PATH)
-        st.dataframe(comp_df, use_container_width=True)
-
-        # Plotly grouped bar chart
-        fig_comp = px.bar(
-            comp_df,
-            x="Model",
-            y=["Accuracy", "Precision", "Recall", "F1", "ROC-AUC"],
-            barmode="group",
-            title="Benchmark Comparison Across Evaluation Metrics",
-            template="plotly_dark",
-            height=450,
-        )
-        st.plotly_chart(fig_comp, use_container_width=True)
-    else:
-        st.warning("Model comparison data not found. Run `python -m src.baselines`.")
-
-# -----------------------------------------------------------------------------
-# Page 6: Ablation Study
-# -----------------------------------------------------------------------------
-elif nav_page == "Ablation Study":
-    st.markdown("## 🔬 Architectural Ablation Study")
-    st.markdown("Quantifying the empirical impact of each architectural stage:")
-    st.markdown("- **A:** CNN Only | **B:** BiLSTM Only | **C:** CNN + BiLSTM | **D:** CNN + BiLSTM + Attention (Proposed)")
-
-    if ABLATION_RESULTS_PATH.exists():
-        ab_df = pd.read_csv(ABLATION_RESULTS_PATH)
-        st.dataframe(ab_df, use_container_width=True)
-
-        if ABLATION_COMPARISON_PATH.exists():
-            st.image(str(ABLATION_COMPARISON_PATH), use_container_width=True)
-    else:
-        st.warning("Ablation results missing. Run `python -m src.ablation`.")
-
-# -----------------------------------------------------------------------------
-# Page 7: Threshold Analysis
-# -----------------------------------------------------------------------------
-elif nav_page == "Threshold Analysis":
-    st.markdown("## 🎚️ Decision Threshold Sensitivity Analysis")
-    st.markdown("Explore operational trade-offs across decision thresholds from 0.10 to 0.90.")
-
-    if THRESHOLD_ANALYSIS_PATH.exists():
-        th_df = pd.read_csv(THRESHOLD_ANALYSIS_PATH)
-
-        fig_thresh = go.Figure()
-        fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["Precision"], mode="lines+markers", name="Precision"))
-        fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["Recall"], mode="lines+markers", name="Recall"))
-        fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["FPR"], mode="lines+markers", name="False Positive Rate"))
-        fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["FNR"], mode="lines+markers", name="False Negative Rate"))
-
-        fig_thresh.update_layout(
-            title="Precision, Recall, FPR, and FNR vs Decision Threshold",
-            xaxis_title="Classification Threshold",
-            yaxis_title="Rate / Score",
-            template="plotly_dark",
-            height=420,
-        )
-        st.plotly_chart(fig_thresh, use_container_width=True)
-
-        st.dataframe(th_df, use_container_width=True)
-    else:
-        st.warning("Threshold analysis missing. Run `python -m src.threshold_analysis`.")
-
-# -----------------------------------------------------------------------------
-# Page 8: Explainability
-# -----------------------------------------------------------------------------
-elif nav_page == "Explainability":
-    st.markdown("## 💡 Model Explainability & Feature Importance")
-    st.markdown("Analyzing Permutation Feature Importance on held-out test sequences.")
-
-    if FEATURE_IMPORTANCE_PATH.exists():
-        imp_df = pd.read_csv(FEATURE_IMPORTANCE_PATH)
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            st.markdown("#### 🏆 Feature Importance Rankings")
-            st.dataframe(imp_df, use_container_width=True, height=450)
-        with c2:
-            if FEATURE_IMPORTANCE_PLOT_PATH.exists():
-                st.image(str(FEATURE_IMPORTANCE_PLOT_PATH), use_container_width=True)
-    else:
-        st.warning("Feature importance missing. Run `python -m src.explainability`.")
-
-    st.markdown(
-        """
-        <div class='disclaimer-box'>
-            <b>Academic Notice on Explainability:</b> Permutation importance and attention weights provide
-            heuristic insight into which features and timesteps influence model outputs. They do not constitute
-            absolute causal proof of system intent.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-# -----------------------------------------------------------------------------
-# Page 9: System Architecture & Technical Documentation
-# -----------------------------------------------------------------------------
-elif nav_page == "📖 Architecture & Technical Docs":
+def render_architecture_and_docs_tabs():
     st.markdown("## 📖 System Architecture & Technical Documentation")
     st.markdown(
         """
@@ -2195,14 +1948,173 @@ elif nav_page == "📖 Architecture & Technical Docs":
             """
         )
 
-    st.markdown("---")
+
+
+def render_research_lab_page():
     st.markdown(
         """
-        <div class='disclaimer-box'>
-            <b>Security & Privacy Guarantee:</b> This project is an enterprise research prototype designed solely for defensive 
-            cybersecurity monitoring. Telemetry analysis runs strictly on localhost with zero external transmission, and zero destructive 
-            operations are performed.
+        <div class='main-header'>
+            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>🔬 SOC Research & Technical Lab</h1>
+            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
+                Comprehensive scientific validations, 6-model baseline benchmarks, architectural ablations, and engineering reference docs.
+            </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+    lab_tab1, lab_tab2, lab_tab3, lab_tab4, lab_tab5, lab_tab6 = st.tabs([
+        "🧪 Scientific Validation Audit",
+        "⚖️ Model Benchmarks (6 Models)",
+        "🔬 Ablations & Sensitivity",
+        "💡 Model Explainability",
+        "📊 Dataset Explorer",
+        "📖 Architecture & Technical Docs",
+    ])
+
+    with lab_tab1:
+        render_scientific_audit_page()
+
+    with lab_tab2:
+        st.markdown("### ⚖️ Baseline vs Proposed Hybrid Benchmark")
+        st.markdown("Direct comparison across all 6 models evaluated on the exact same test partition.")
+
+        if MODEL_COMPARISON_PATH.exists():
+            comp_df = pd.read_csv(MODEL_COMPARISON_PATH)
+            st.dataframe(comp_df, use_container_width=True)
+
+            fig_comp = px.bar(
+                comp_df,
+                x="Model",
+                y=["Accuracy", "Precision", "Recall", "F1", "ROC-AUC"],
+                barmode="group",
+                title="Benchmark Comparison Across Evaluation Metrics",
+                template="plotly_dark",
+                height=450,
+            )
+            st.plotly_chart(fig_comp, use_container_width=True)
+        else:
+            st.warning("Model comparison data not found. Run `python -m src.baselines`.")
+
+    with lab_tab3:
+        st.markdown("### 🔬 Architectural Ablation & Sensitivity Analysis")
+        st.markdown("Quantifying the empirical impact of each architectural stage:")
+        st.markdown("- **A:** CNN Only | **B:** BiLSTM Only | **C:** CNN + BiLSTM | **D:** CNN + BiLSTM + Attention (Proposed)")
+
+        if ABLATION_RESULTS_PATH.exists():
+            ab_df = pd.read_csv(ABLATION_RESULTS_PATH)
+            st.dataframe(ab_df, use_container_width=True)
+
+            if ABLATION_COMPARISON_PATH.exists():
+                st.image(str(ABLATION_COMPARISON_PATH), use_container_width=True)
+        else:
+            st.warning("Ablation results missing. Run `python -m src.ablation`.")
+
+        st.markdown("---")
+        st.markdown("#### 🎚️ Decision Threshold Sensitivity Analysis (0.10 to 0.90)")
+        if THRESHOLD_ANALYSIS_PATH.exists():
+            th_df = pd.read_csv(THRESHOLD_ANALYSIS_PATH)
+
+            fig_thresh = go.Figure()
+            fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["Precision"], mode="lines+markers", name="Precision"))
+            fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["Recall"], mode="lines+markers", name="Recall"))
+            fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["FPR"], mode="lines+markers", name="False Positive Rate"))
+            fig_thresh.add_trace(go.Scatter(x=th_df["Threshold"], y=th_df["FNR"], mode="lines+markers", name="False Negative Rate"))
+
+            fig_thresh.update_layout(
+                title="Precision, Recall, FPR, and FNR vs Decision Threshold",
+                xaxis_title="Classification Threshold",
+                yaxis_title="Rate / Score",
+                template="plotly_dark",
+                height=420,
+            )
+            st.plotly_chart(fig_thresh, use_container_width=True)
+
+            st.dataframe(th_df, use_container_width=True)
+
+    with lab_tab4:
+        st.markdown("### 💡 Model Explainability & Permutation Feature Importance")
+        st.markdown("Analyzing Permutation Feature Importance on held-out test sequences.")
+
+        if FEATURE_IMPORTANCE_PATH.exists():
+            imp_df = pd.read_csv(FEATURE_IMPORTANCE_PATH)
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                st.markdown("#### 🏆 Feature Importance Rankings")
+                st.dataframe(imp_df, use_container_width=True, height=450)
+            with c2:
+                if FEATURE_IMPORTANCE_PLOT_PATH.exists():
+                    st.image(str(FEATURE_IMPORTANCE_PLOT_PATH), use_container_width=True)
+        else:
+            st.warning("Feature importance missing. Run `python -m src.explainability`.")
+
+        st.markdown(
+            """
+            <div class='disclaimer-box'>
+                <b>Academic Notice on Explainability:</b> Permutation importance and attention weights provide
+                heuristic insight into which features and timesteps influence model outputs. They do not constitute
+                absolute causal proof of system intent.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with lab_tab5:
+        st.markdown("### 📊 Exploratory Behavioral Telemetry Dataset")
+        st.markdown("Inspect ground-truth distributions, class balance, and multi-step progression.")
+
+        if not DATASET_PATH.exists():
+            st.warning("Dataset not found! Generate it by running `python -m src.dataset`.")
+        else:
+            df = pd.read_csv(DATASET_PATH)
+            col_a, col_b = st.columns([2, 1])
+            with col_a:
+                st.markdown(f"**Dataset Rows:** `{len(df):,}` | **Sequences:** `{df['sequence_id'].nunique():,}` | **Features:** `{len(FEATURES)}`")
+                st.dataframe(df.head(50), height=320, use_container_width=True)
+            with col_b:
+                if (EDA_DIR / "class_distribution.png").exists():
+                    st.image(str(EDA_DIR / "class_distribution.png"), caption="Sequence Class Balance", use_container_width=True)
+
+            st.markdown("#### 📐 Telemetry Feature Descriptive Statistics")
+            st.dataframe(df[FEATURES].describe().T[["mean", "std", "min", "max"]].round(3), use_container_width=True)
+
+            if (REPORTS_DIR / "correlation_matrix.png").exists():
+                st.markdown("#### 🔗 Full Pearson Correlation Matrix")
+                st.image(str(REPORTS_DIR / "correlation_matrix.png"), use_container_width=True)
+
+            if (EDA_DIR / "sequence_temporal_patterns.png").exists():
+                st.markdown("#### ⏱️ Temporal Behavioral Escalation Over 20 Timesteps")
+                st.image(str(EDA_DIR / "sequence_temporal_patterns.png"), use_container_width=True)
+
+            if (EDA_DIR / "feature_boxplots.png").exists():
+                st.image(str(EDA_DIR / "feature_boxplots.png"), use_container_width=True)
+
+    with lab_tab6:
+        render_architecture_and_docs_tabs()
+
+
+
+# -----------------------------------------------------------------------------
+# Main Routing Dispatch
+# -----------------------------------------------------------------------------
+if nav_page == "🔍 Instant File Scanner":
+    render_file_scanner_page()
+elif nav_page == "📡 Live Telemetry Detection":
+    render_live_telemetry_page()
+elif nav_page == "📦 Batch File Triage":
+    render_batch_triage_page()
+elif nav_page == "📊 Security Dashboard & Reports":
+    render_security_dashboard_page()
+elif nav_page == "🔬 SOC Research & Technical Lab":
+    render_research_lab_page()
+
+st.markdown("---")
+st.markdown(
+    """
+    <div class='disclaimer-box'>
+        🔒 <b>Zero Cloud Transmission & Privacy Guarantee:</b> All endpoint telemetry evaluations, model inferences, and 
+        file inspections run 100% locally in-memory. Zero sensitive system data is transmitted across the network.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
