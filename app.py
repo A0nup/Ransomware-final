@@ -51,7 +51,6 @@ from src.config import (
 )
 from src.predict import predict_csv, determine_risk_level
 from src.static_scanner import inspect_executable_file
-from src.endpoint_monitor import EndpointMonitor, get_global_endpoint_monitor
 from src.preprocessing import load_scaler
 from src.evaluate import load_trained_model
 from src.explainability import compute_sample_attribution, create_attribution_bar_chart, FEATURE_READABLE_NAMES
@@ -191,7 +190,7 @@ app_mode = st.sidebar.radio(
     "Operating Tier",
     ["🛡️ Public Mode (Zero-Technical)", "🔬 Cybersecurity Analyst Mode"],
     index=0,
-    help="Public Mode: Plain-English file scanner & automated 1-click endpoint shield. Analyst Mode: Full EDR telemetry, attention heatmaps, and scientific validation audit."
+    help="Public Mode: Zero-execution file scanner & batch triage. Analyst Mode: Deep model telemetry, attention heatmaps, explainability, and scientific validation audit."
 )
 
 if app_mode == "🔬 Cybersecurity Analyst Mode":
@@ -199,7 +198,6 @@ if app_mode == "🔬 Cybersecurity Analyst Mode":
         "Analyst Navigation",
         [
             "Executive Dashboard",
-            "Live Endpoint Telemetry & EDR",
             "Scientific Validation & Audit",
             "Dataset Explorer",
             "Live Detection",
@@ -242,242 +240,12 @@ def load_latest_metrics():
         except Exception:
             pass
     return {
-        "acc": "97.07%",
-        "prec": "95.84%",
+        "acc": "98.13%",
+        "prec": "97.87%",
         "rec": "98.40%",
-        "f1": "0.9711",
-        "auc": "0.9778",
+        "f1": "0.9813",
+        "auc": "0.9912",
     }
-
-
-def safe_sample_telemetry(monitor, sample_count=5, delay=0.02):
-    """Safely sample telemetry regardless of whether EndpointMonitor is cached or fresh."""
-    for _ in range(sample_count):
-        if hasattr(monitor, "sample_telemetry"):
-            monitor.sample_telemetry()
-        elif hasattr(monitor, "_sample_current_telemetry_vector"):
-            vec, meta = monitor._sample_current_telemetry_vector()
-            with monitor._lock:
-                monitor.history_buffer.append(vec)
-                monitor.raw_event_log.append(meta)
-        time.sleep(delay)
-
-
-def safe_score_window(monitor, model, scaler):
-    """Safely score rolling buffer with model regardless of class version."""
-    if hasattr(monitor, "score_window"):
-        return monitor.score_window(model, scaler)
-    import torch
-    with monitor._lock:
-        if len(monitor.history_buffer) == 0:
-            mat = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
-        else:
-            mat = np.array(list(monitor.history_buffer), dtype=np.float32)
-            if len(mat) < SEQ_LEN:
-                pad = np.repeat(mat[:1], SEQ_LEN - len(mat), axis=0)
-                mat = np.vstack([pad, mat])
-    try:
-        scaled = scaler.transform(mat)
-        t = torch.tensor(scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
-        with torch.no_grad():
-            logits, _ = model(t)
-            prob = float(torch.sigmoid(logits).item())
-    except Exception:
-        prob = 0.008
-    risk = "HIGH" if prob >= 0.70 else ("MEDIUM" if prob >= 0.30 else "LOW")
-    return prob, risk
-
-
-def safe_get_dataframe(monitor):
-    """Safely extract rolling buffer as DataFrame."""
-    if hasattr(monitor, "get_current_dataframe"):
-        return monitor.get_current_dataframe()
-    with monitor._lock:
-        if monitor.history_buffer:
-            arr = np.array(list(monitor.history_buffer), dtype=np.float32)
-            return pd.DataFrame(arr, columns=FEATURES)
-    return pd.DataFrame(columns=FEATURES)
-
-
-@st.fragment(run_every=2)
-def render_live_shield_public_fragment(monitor):
-    metrics = monitor.get_latest_metrics()
-    is_active = metrics["is_running"]
-
-    if is_active:
-        model = load_trained_model(MODEL_CHECKPOINT_PATH, device="cpu")
-        scaler = load_scaler(SCALER_PATH)
-        prob, risk = safe_score_window(monitor, model, scaler)
-        latest_event = metrics.get("latest_event", {})
-        prob_pct = prob * 100.0
-    else:
-        prob_pct = 0.82
-        risk = "LOW"
-        latest_event = metrics.get("latest_event", {})
-
-    status_color = "#10b981" if risk == "LOW" else ("#f59e0b" if risk == "MEDIUM" else "#ef4444")
-    status_icon = "🟢" if risk == "LOW" else ("🟠" if risk == "MEDIUM" else "🔴")
-    status_text = "LIVE LOCALHOST SHIELD ACTIVE — GUARDING SYSTEM" if is_active else "SHIELD STANDBY (READY TO ACTIVATE)"
-
-    st.markdown(
-        f"""
-        <div style="background: rgba(15, 23, 42, 0.7); border: 2px solid {status_color}; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                <div>
-                    <span style="background: {status_color}; color: #ffffff; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.85rem;">
-                        {status_icon} {status_text}
-                    </span>
-                    <h3 style="color: #f8fafc; margin: 10px 0 0 0; font-size: 1.35rem;">
-                        Real-Time Threat Level: <span style="color: {status_color};">{risk} RISK ({prob_pct:.1f}%)</span>
-                    </h3>
-                </div>
-                <div style="text-align: right; margin-top: 6px;">
-                    <span style="color: #94a3b8; font-size: 0.85rem;">Host Execution & Data Isolation:</span><br>
-                    <b style="color: #60a5fa;">100% Localhost (Zero Cloud Transfer)</b>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # 4 Vital Metrics
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        cpu_val = latest_event.get("cpu_percent", psutil.cpu_percent(interval=None))
-        c1.metric("Local CPU Load", f"{cpu_val:.1f}%")
-    with c2:
-        mem_val = latest_event.get("memory_percent", psutil.virtual_memory().percent)
-        c2.metric("Local Memory Usage", f"{mem_val:.1f}%")
-    with c3:
-        wr_rate = latest_event.get("file_write_rate", 0.0)
-        c3.metric("Filesystem Write Rate", f"{wr_rate:.0f} ops/s")
-    with c4:
-        ent_d = latest_event.get("entropy_delta", 0.0)
-        c4.metric("Entropy Delta", f"{ent_d:.3f}")
-
-    # Alerts handling
-    alerts = metrics.get("recent_alerts", [])
-    if alerts:
-        latest_alert = alerts[-1]
-        st.error(f"🚨 **ACTIVE RANSOMWARE THREAT DETECTED ON LOCALHOST!** (Model Probability: {latest_alert.get('probability')}%)")
-        with st.expander("⚠️ View Threat Details & 1-Click Quarantine", expanded=True):
-            st.write(f"- **Trigger Time:** `{latest_alert.get('timestamp')}`")
-            st.write(f"- **Severity:** `{latest_alert.get('severity')}`")
-            st.write(f"- **Culprit Process:** `{latest_alert.get('culprit_process')}`")
-            st.write(f"- **Affected Files:** `{latest_alert.get('affected_files')}`")
-            c_act1, c_act2 = st.columns(2)
-            with c_act1:
-                if latest_alert.get("affected_files"):
-                    first_file = latest_alert["affected_files"][0]
-                    if st.button("🛡️ Quarantine Affected File Now", key=f"pub_q_{latest_alert.get('timestamp')}"):
-                        q_res = monitor.quarantine_file(first_file)
-                        st.success(f"Quarantined to `{q_res.get('quarantine_path')}` (read-only mode 0400).")
-            with c_act2:
-                if st.button("🧹 Dismiss Alert & Reset Status", key=f"dismiss_{latest_alert.get('timestamp')}"):
-                    monitor.clear_local_history()
-                    st.success("Alert dismissed. Local monitoring restored to nominal baseline.")
-                    st.rerun()
-
-    # Real-Time Plotly Timeline
-    if hasattr(monitor, "get_timeline_dataframe"):
-        df_tl = monitor.get_timeline_dataframe()
-    else:
-        df_tl = pd.DataFrame()
-
-    if not df_tl.empty and len(df_tl) > 1:
-        st.markdown("#### 📈 Live Threat Probability Timeline (Localhost)")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=list(range(len(df_tl))),
-            y=df_tl["probability"],
-            mode="lines+markers",
-            name="Threat Probability (%)",
-            line=dict(color="#10b981" if risk == "LOW" else "#ef4444", width=3),
-            marker=dict(size=5)
-        ))
-        fig.add_hline(y=50.0, line_dash="dash", line_color="#f59e0b", annotation_text="Decision Threshold (50%)")
-        fig.update_layout(
-            height=240,
-            margin=dict(l=20, r=20, t=25, b=20),
-            template="plotly_dark",
-            yaxis=dict(range=[0, 105], title="Probability (%)"),
-            xaxis=dict(title="Recent Telemetry Steps"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-
-@st.fragment(run_every=2)
-def render_live_edr_analyst_fragment(monitor):
-    metrics = monitor.get_latest_metrics()
-    is_active = metrics["is_running"]
-
-    if is_active:
-        model = load_trained_model(MODEL_CHECKPOINT_PATH, device="cpu")
-        scaler = load_scaler(SCALER_PATH)
-        prob, risk = safe_score_window(monitor, model, scaler)
-        latest_event = metrics.get("latest_event", {})
-        prob_pct = prob * 100.0
-    else:
-        prob_pct = 0.8
-        risk = "LOW"
-        latest_event = metrics.get("latest_event", {})
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Live Threat Probability", f"{prob_pct:.2f}%", delta=risk, delta_color="inverse")
-    c2.metric("Sliding Buffer Depth", metrics.get("buffer_depth", f"0 / {SEQ_LEN}"))
-    c3.metric("Write Delta Rate", f"{latest_event.get('file_write_rate', 0.0):.0f} ops/s")
-    c4.metric("Entropy Delta", f"{latest_event.get('entropy_delta', 0.0):.3f}")
-    c5.metric("Local Incidents Logged", f"{metrics.get('alert_count', 0)}")
-
-    alerts = metrics.get("recent_alerts", [])
-    if alerts:
-        latest_alert = alerts[-1]
-        st.error(f"🚨 **ACTIVE EDR BEHAVIORAL INCIDENT (Localhost):** Probability `{latest_alert.get('probability')}%` | Severity: `{latest_alert.get('severity')}`")
-        st.json(latest_alert)
-
-    # Dynamic Visualizations
-    if hasattr(monitor, "get_timeline_dataframe"):
-        df_tl = monitor.get_timeline_dataframe()
-    else:
-        df_tl = pd.DataFrame()
-
-    if not df_tl.empty and len(df_tl) > 1:
-        tab_v1, tab_v2, tab_v3 = st.tabs(["📈 Threat Probability Stream", "📊 Multi-Signal Telemetry", "🗄️ Rolling (20, 20) Tensor"])
-        with tab_v1:
-            fig1 = go.Figure()
-            fig1.add_trace(go.Scatter(
-                x=list(range(len(df_tl))),
-                y=df_tl["probability"],
-                mode="lines+markers",
-                name="Ransomware Probability (%)",
-                line=dict(color="#60a5fa", width=3),
-            ))
-            fig1.add_hline(y=50.0, line_dash="dash", line_color="#ef4444", annotation_text="Threshold tau=0.50")
-            fig1.update_layout(
-                title="Continuous Behavioral Threat Ingestion Timeline (Localhost)",
-                xaxis_title="Sequential Sampling Steps",
-                yaxis_title="Probability (%)",
-                template="plotly_dark",
-                height=320,
-            )
-            st.plotly_chart(fig1, use_container_width=True)
-
-        with tab_v2:
-            fig2 = go.Figure()
-            fig2.add_trace(go.Scatter(x=list(range(len(df_tl))), y=df_tl["file_write_rate"], mode="lines", name="Write Rate (ops/s)"))
-            fig2.add_trace(go.Scatter(x=list(range(len(df_tl))), y=df_tl["entropy_delta"] * 10, mode="lines", name="Entropy Delta (x10)"))
-            fig2.add_trace(go.Scatter(x=list(range(len(df_tl))), y=df_tl["cpu_percent"], mode="lines", name="CPU Load %"))
-            fig2.update_layout(
-                title="Real-Time Host System Deltas (Localhost Ingestion)",
-                template="plotly_dark",
-                height=320,
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-
-        with tab_v3:
-            df_cur = safe_get_dataframe(monitor)
-            st.dataframe(df_cur.tail(10), use_container_width=True)
 
 
 def render_soc_extended_analysis_tabs(
@@ -1033,16 +801,15 @@ def render_public_mode():
         <div class='main-header'>
             <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>🛡️ Public Ransomware Defense & Safety Center</h1>
             <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
-                Everyday endpoint protection designed for non-technical users: <b>Zero-Execution File Scanner</b> and <b>Live Threat Shield & Continuous Monitor</b>.
+                Everyday defensive protection designed for non-technical users: <b>Zero-Execution File Scanner</b> and <b>Batch Telemetry Triage</b>.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    pub_tab1, pub_tab2, pub_tab3 = st.tabs([
+    pub_tab1, pub_tab2 = st.tabs([
         "🔍 Suspicious File Scanner (Zero Execution)",
-        "🛡️ Live System Shield & Threat Monitor (Localhost)",
         "📦 Batch File & Telemetry Triage",
     ])
     
@@ -1180,87 +947,6 @@ def render_public_mode():
                 )
     
     with pub_tab2:
-        st.markdown("### 🛡️ Live System Shield & Threat Monitor (Localhost)")
-        st.markdown(
-            "Continuous, real-time behavioral protection that monitors your host operating system. "
-            "Our shield tracks live process creation, file system deltas, and disk operations, "
-            "evaluates them in real time with our Hybrid Deep Learning model, and alerts you instantly if ransomware activity is detected."
-        )
-
-        # Localhost Confidentiality & Storage Guarantee Banner
-        st.markdown(
-            """
-            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid #10b981; border-radius: 10px; padding: 14px; margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                    <div>
-                        <h4 style="color: #10b981; margin: 0; font-size: 1.05rem;">🔒 100% Localhost Privacy & Data Retention Guarantee</h4>
-                        <p style="color: #cbd5e1; margin-top: 6px; font-size: 0.92rem; margin-bottom: 0;">
-                            All telemetry ingestion, process analysis, and neural network evaluations run <b>strictly on this machine</b> (localhost).
-                            No telemetry or file data is ever transmitted across the network. All security audit logs remain exclusively in your local folder:
-                            <code>data/live_threat_logs/</code>.
-                        </p>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        monitor = get_global_endpoint_monitor()
-
-        col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([1, 1, 1])
-        with col_ctrl1:
-            if not monitor.is_active():
-                if st.button("🟢 ACTIVATE LIVE THREAT SHIELD", type="primary", use_container_width=True):
-                    monitor.start()
-                    st.rerun()
-            else:
-                if st.button("⏹️ DEACTIVATE LIVE THREAT SHIELD", type="secondary", use_container_width=True):
-                    monitor.stop()
-                    st.rerun()
-
-        with col_ctrl2:
-            if st.button("⚡ Run Instant 1-Click System Check", use_container_width=True):
-                with st.spinner("Monitoring host telemetry (process activity, filesystem deltas, disk throughput)..."):
-                    safe_sample_telemetry(monitor, sample_count=5, delay=0.02)
-                    model = load_trained_model(MODEL_CHECKPOINT_PATH, device="cpu")
-                    scaler = load_scaler(SCALER_PATH)
-                    prob, risk = safe_score_window(monitor, model, scaler)
-                    st.success(f"Assessment Complete: Current Workload is {risk} Risk ({prob*100:.2f}% Probability)")
-
-        with col_ctrl3:
-            if st.button("🧪 Simulate Attack Alert", use_container_width=True, help="Safely triggers a simulated ransomware threat alert to verify UI response"):
-                sim_alert = {
-                    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                    "probability": 98.7,
-                    "threshold": 50.0,
-                    "severity": "CRITICAL",
-                    "culprit_process": {"name": "simulated_ransom_payload.exe", "pid": 9876},
-                    "affected_files": ["sample_financial_records.xlsx.locked", "user_database.sql.locked"],
-                    "entropy_delta": 3.842,
-                    "file_write_rate": 142.0,
-                    "action_taken": "ALERT_DISPATCHED",
-                    "_epoch": time.time(),
-                }
-                monitor.alerts.append(sim_alert)
-                monitor._persist_local_alert(sim_alert)
-                with monitor._lock:
-                    monitor.recent_predictions.append({
-                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                        "probability": 98.7,
-                        "risk": "HIGH",
-                        "cpu_percent": 82.4,
-                        "memory_percent": 45.1,
-                        "file_write_rate": 142.0,
-                        "entropy_delta": 3.842,
-                        "bytes_written_mb": 24.5,
-                    })
-                st.warning("⚠️ Safe Simulation Triggered: Notice the real-time threat alert, red danger status, and quarantine action below!")
-                st.rerun()
-
-        render_live_shield_public_fragment(monitor)
-
-    with pub_tab3:
         st.markdown("### 📦 Batch File & Telemetry Triage Center")
         st.markdown(
             "Upload a batch of suspicious files, endpoint execution logs (.csv), or a compressed `.zip` archive. "
@@ -1331,147 +1017,6 @@ def render_public_mode():
                     height=320,
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
-
-
-def render_endpoint_edr_page():
-    st.markdown(
-        """
-        <div class='main-header'>
-            <h1 style='margin: 0; color: #f8fafc; font-size: 2.1rem;'>🖥️ Live Endpoint Telemetry & EDR Response</h1>
-            <p style='margin-top: 6px; color: #94a3b8; font-size: 1.05rem;'>
-                Continuous Host-Level Behavioral Ingestion, Real-Time Model Inference, and 100% Localhost Data Confidentiality
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Localhost Data Isolation Guarantee
-    st.markdown(
-        """
-        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid #10b981; border-radius: 10px; padding: 14px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                <div>
-                    <h4 style="color: #10b981; margin: 0; font-size: 1.05rem;">🔒 100% Localhost Data Retention Guarantee</h4>
-                    <p style="color: #cbd5e1; margin-top: 6px; font-size: 0.92rem; margin-bottom: 0;">
-                        All host telemetry, kernel deltas, and behavioral inference are performed locally on this machine.
-                        No external servers or cloud APIs receive this data. Security logs are stored in:
-                        <code>data/live_threat_logs/</code> and <code>reports/incidents/</code>.
-                    </p>
-                </div>
-                <div style="margin-top: 6px;">
-                    <span style="background: #10b981; color: #022c22; font-weight: bold; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem;">
-                        Air-Gapped Ready
-                    </span>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    monitor = get_global_endpoint_monitor()
-
-    col_cfg1, col_cfg2, col_cfg3 = st.columns([2, 1, 1])
-    with col_cfg1:
-        watch_dir = st.text_input("Monitored Target Directory (Localhost):", value=str(Path.cwd()))
-        if str(monitor.watch_path) != str(Path(watch_dir).resolve()):
-            monitor.watch_path = Path(watch_dir).resolve()
-    with col_cfg2:
-        interval_choice = st.slider("Sampling Interval (sec):", min_value=0.5, max_value=3.0, value=float(monitor.sampling_interval_sec), step=0.5)
-        monitor.sampling_interval_sec = interval_choice
-    with col_cfg3:
-        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        if not monitor.is_active():
-            if st.button("🟢 Start Live Monitoring", type="primary", use_container_width=True):
-                monitor.start()
-                st.rerun()
-        else:
-            if st.button("⏹️ Stop Live Monitoring", type="secondary", use_container_width=True):
-                monitor.stop()
-                st.rerun()
-
-    # One-shot sample option
-    if st.button("Sample 20-Timestep Host Window Now", type="secondary"):
-        with st.spinner("Sampling 20 sequential telemetry windows from host OS..."):
-            safe_sample_telemetry(monitor, sample_count=20, delay=0.02)
-            model = load_trained_model(MODEL_CHECKPOINT_PATH, device="cpu")
-            scaler = load_scaler(SCALER_PATH)
-            prob, risk = safe_score_window(monitor, model, scaler)
-            st.success(f"Snapshot Captured: Probability `{prob*100:.2f}%` | Risk Level: `{risk}`")
-
-    # Live Fragment
-    render_live_edr_analyst_fragment(monitor)
-
-    st.markdown("---")
-
-    # Incident Response Guardrails & Local Storage Explorer
-    col_edr1, col_edr2 = st.columns([1, 1])
-    with col_edr1:
-        st.markdown("#### 🛡️ Incident Response Guardrails")
-        st.markdown("##### 1. Controlled File Quarantine (Read-Only Isolation)")
-        target_q = st.text_input("File path to isolate:", value="sample_test_payload.tmp")
-        if st.button("Quarantine Target File"):
-            dummy_p = Path(target_q)
-            if not dummy_p.exists():
-                dummy_p.write_text("Simulated suspicious content for containment.")
-            res_q = monitor.quarantine_file(str(dummy_p), reason="Analyst manual containment")
-            if res_q.get("success"):
-                st.success(f"Quarantined to `{res_q['quarantine_path']}` with mode 0400 (read-only).")
-            else:
-                st.error(res_q.get("error") or res_q.get("message"))
-
-        st.markdown("##### 2. Process Termination Guardrail")
-        pid_term = st.number_input("Target Process PID:", min_value=1, max_value=999999, value=12345)
-        confirm_kill = st.checkbox("Confirm PID termination authorization", value=False)
-        if st.button("Terminate Process", type="secondary"):
-            if not confirm_kill:
-                st.warning("Action blocked: Confirmation checkbox required to prevent accidental process disruption.")
-            else:
-                res_k = monitor.terminate_process(int(pid_term), confirm=True, force=False)
-                if res_k.get("success"):
-                    st.success(f"Process {pid_term} safely signaled.")
-                else:
-                    st.error(f"Termination prevented: {res_k.get('error') or res_k.get('message')}")
-
-    with col_edr2:
-        st.markdown("#### 💾 Local Storage & Forensic Export")
-        st.markdown("##### 1. Generate & Export Incident Report")
-        if st.button("Export Incident Report (JSON & CSV)"):
-            res_rep = monitor.export_incident_report(threat_level="ANALYST_EXPORT", probability=0.985)
-            st.success(f"Incident report generated locally:\n- `{res_rep['json_path']}`\n- `{res_rep['csv_path']}`")
-
-        st.markdown("##### 2. Local Threat Log Status")
-        log_file = monitor.telemetry_log_file
-        if log_file.exists():
-            log_size_kb = log_file.stat().st_size / 1024
-            st.info(f"Local Telemetry File: `{log_file}` ({log_size_kb:.1f} KB)")
-            try:
-                with open(log_file, "r", encoding="utf-8") as lf:
-                    lines = lf.readlines()
-                    log_lines = len(lines)
-                    content = "".join(lines)
-                st.write(f"- Total Recorded Events: **{log_lines:,} entries**")
-
-                c_d1, c_d2 = st.columns(2)
-                with c_d1:
-                    st.download_button(
-                        "📥 Download Telemetry Log (JSONL)",
-                        data=content,
-                        file_name="localhost_live_telemetry.jsonl",
-                        mime="application/json",
-                    )
-                with c_d2:
-                    if st.button("🧹 Clear Local Host History"):
-                        monitor.clear_local_history()
-                        if log_file.exists():
-                            log_file.write_text("")
-                        st.success("Localhost history cleared.")
-                        st.rerun()
-            except Exception as e:
-                st.warning(f"Could not read local log file: {e}")
-        else:
-            st.info(f"Local Telemetry Log will be created at: `{log_file}` upon activation.")
 
 
 def render_scientific_audit_page():
@@ -1608,10 +1153,6 @@ def render_scientific_audit_page():
 # Routing for Modes and New Pages
 if app_mode == "🛡️ Public Mode (Zero-Technical)":
     render_public_mode()
-    st.stop()
-
-if nav_page == "Live Endpoint Telemetry & EDR":
-    render_endpoint_edr_page()
     st.stop()
 
 if nav_page == "Scientific Validation & Audit":

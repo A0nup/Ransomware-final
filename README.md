@@ -320,7 +320,7 @@ Test coverage includes:
 
 ```text
 ransomware-detection/
-├── app.py                      # Multi-page Streamlit Dashboard & Live EDR Monitor
+├── app.py                      # Multi-page Streamlit Dashboard & Threat Analysis Studio
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # Comprehensive technical documentation
 ├── LICENSE                     # MIT License
