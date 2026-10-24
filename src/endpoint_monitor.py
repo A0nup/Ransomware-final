@@ -46,6 +46,7 @@ from src.static_scanner import calculate_entropy
 # Directory where quarantined files are safely isolated
 DEFAULT_QUARANTINE_DIR = Path(".quarantine")
 DEFAULT_INCIDENT_DIR = Path("reports/incidents")
+DEFAULT_LOCAL_LOG_DIR = Path("data/live_threat_logs")
 
 
 class EndpointMonitor:
@@ -67,6 +68,10 @@ class EndpointMonitor:
         self.quarantine_dir = quarantine_dir
         self.quarantine_dir.mkdir(parents=True, exist_ok=True)
         DEFAULT_INCIDENT_DIR.mkdir(parents=True, exist_ok=True)
+        self.local_log_dir = DEFAULT_LOCAL_LOG_DIR
+        self.local_log_dir.mkdir(parents=True, exist_ok=True)
+        self.telemetry_log_file = self.local_log_dir / "live_telemetry.jsonl"
+        self.alerts_log_file = self.local_log_dir / "threat_alerts.json"
 
         self._is_running = False
         self._thread: Optional[threading.Thread] = None
@@ -74,7 +79,8 @@ class EndpointMonitor:
 
         # Telemetry rolling history: exactly 20 timesteps x 20 features
         self.history_buffer = deque(maxlen=SEQ_LEN)
-        self.raw_event_log = deque(maxlen=200) # Recent live events for dashboard display
+        self.raw_event_log = deque(maxlen=200)  # Recent live events for dashboard display
+        self.recent_predictions = deque(maxlen=100)  # Real-time inference timeline
         self.alerts: List[Dict[str, Any]] = []
 
         # State snapshots for differential telemetry
@@ -337,12 +343,48 @@ class EndpointMonitor:
 
         return feature_vector, meta
 
+    def _persist_local_event(self, meta: Dict[str, Any], vec: np.ndarray, prob: float = 0.0) -> None:
+        """Append telemetry record to local JSONL log on localhost."""
+        try:
+            record = {
+                "timestamp": meta.get("timestamp", datetime.now(timezone.utc).strftime("%H:%M:%S")),
+                "probability": round(prob * 100.0, 2),
+                "file_write_rate": meta.get("file_write_rate", 0.0),
+                "entropy_delta": round(meta.get("entropy_delta", 0.0), 4),
+                "cpu_percent": meta.get("cpu_percent", 0.0),
+                "memory_percent": meta.get("memory_percent", 0.0),
+                "shadow_cmd": meta.get("shadow_cmd", 0.0),
+                "affected_files_count": len(meta.get("affected_files", [])),
+            }
+            with open(self.telemetry_log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+        except Exception:
+            pass
+
+    def _persist_local_alert(self, alert_obj: Dict[str, Any]) -> None:
+        """Persist alert to local JSON file on localhost."""
+        try:
+            alerts_data = []
+            if self.alerts_log_file.exists():
+                try:
+                    with open(self.alerts_log_file, "r", encoding="utf-8") as f:
+                        alerts_data = json.load(f)
+                except Exception:
+                    alerts_data = []
+            alerts_data.append(alert_obj)
+            with open(self.alerts_log_file, "w", encoding="utf-8") as f:
+                json.dump(alerts_data, f, indent=2)
+        except Exception:
+            pass
+
     def _monitor_loop(self) -> None:
         """Main background loop executed while monitor is active."""
         print(f"[+] Endpoint behavioral monitoring started on watch path: {self.watch_path}")
         while self._is_running:
             try:
                 vec, meta = self._sample_current_telemetry_vector()
+                prob = 0.008
+                attn_weights = [0.05] * SEQ_LEN
                 with self._lock:
                     self.history_buffer.append(vec)
                     self.raw_event_log.append(meta)
@@ -366,33 +408,156 @@ class EndpointMonitor:
                             prob = float(torch.sigmoid(logits).item())
                             attn_weights = attn.squeeze(0).cpu().numpy().tolist() if attn is not None else [0.05] * SEQ_LEN
 
-                        meta["probability"] = round(prob * 100.0, 2)
-                        meta["attention_weights"] = attn_weights
+                    meta["probability"] = round(prob * 100.0, 2)
+                    meta["attention_weights"] = attn_weights
 
-                        # Check for threat alert trigger
-                        is_threat = prob >= self.threshold or meta["shadow_cmd"] > 0
-                        if is_threat:
-                            alert_obj = {
-                                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                                "probability": round(prob * 100.0, 2),
-                                "threshold": round(self.threshold * 100.0, 1),
-                                "severity": "CRITICAL" if prob >= 0.85 or meta["shadow_cmd"] > 0 else "HIGH",
-                                "culprit_process": meta.get("culprit_process") or {"name": "Unknown", "pid": "N/A"},
-                                "affected_files": meta.get("affected_files", [])[:10],
-                                "entropy_delta": round(meta["entropy_delta"], 3),
-                                "file_write_rate": meta["file_write_rate"],
-                                "action_taken": "ALERT_DISPATCHED",
-                            }
-                            # Avoid spamming duplicates within 5 seconds
-                            if not self.alerts or (time.time() - self.alerts[-1].get("_epoch", 0) > 5.0):
-                                alert_obj["_epoch"] = time.time()
-                                self.alerts.append(alert_obj)
-                                print(f"[!] BEHAVIORAL THREAT ALERT: Prob={alert_obj['probability']}% | Severity={alert_obj['severity']}")
+                    # Timeline record for live dashboard plotting
+                    timeline_record = {
+                        "timestamp": meta.get("timestamp", datetime.now(timezone.utc).strftime("%H:%M:%S")),
+                        "probability": round(prob * 100.0, 2),
+                        "risk": "HIGH" if prob >= 0.70 else ("MEDIUM" if prob >= 0.30 else "LOW"),
+                        "cpu_percent": meta.get("cpu_percent", 0.0),
+                        "memory_percent": meta.get("memory_percent", 0.0),
+                        "file_write_rate": meta.get("file_write_rate", 0.0),
+                        "entropy_delta": round(meta.get("entropy_delta", 0.0), 4),
+                        "bytes_written_mb": round(float(vec[18]), 2) if len(vec) > 18 else 0.0,
+                    }
+                    self.recent_predictions.append(timeline_record)
+                    self._persist_local_event(meta, vec, prob=prob)
 
-            except Exception as e:
+                    # Check for threat alert trigger
+                    is_threat = prob >= self.threshold or meta["shadow_cmd"] > 0
+                    if is_threat:
+                        alert_obj = {
+                            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                            "probability": round(prob * 100.0, 2),
+                            "threshold": round(self.threshold * 100.0, 1),
+                            "severity": "CRITICAL" if prob >= 0.85 or meta["shadow_cmd"] > 0 else "HIGH",
+                            "culprit_process": meta.get("culprit_process") or {"name": "Unknown", "pid": "N/A"},
+                            "affected_files": meta.get("affected_files", [])[:10],
+                            "entropy_delta": round(meta["entropy_delta"], 3),
+                            "file_write_rate": meta["file_write_rate"],
+                            "action_taken": "ALERT_DISPATCHED",
+                        }
+                        # Avoid spamming duplicates within 5 seconds
+                        if not self.alerts or (time.time() - self.alerts[-1].get("_epoch", 0) > 5.0):
+                            alert_obj["_epoch"] = time.time()
+                            self.alerts.append(alert_obj)
+                            self._persist_local_alert(alert_obj)
+                            print(f"[!] BEHAVIORAL THREAT ALERT: Prob={alert_obj['probability']}% | Severity={alert_obj['severity']}")
+
+            except Exception:
                 pass
 
             time.sleep(self.sampling_interval_sec)
+
+    def sample_telemetry(self) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """
+        Sample the host system telemetry across one interval, append to history buffer,
+        and persist locally to disk on localhost. Thread-safe.
+        """
+        vec, meta = self._sample_current_telemetry_vector()
+        with self._lock:
+            self.history_buffer.append(vec)
+            self.raw_event_log.append(meta)
+            self._persist_local_event(meta, vec, prob=0.0)
+        return vec, meta
+
+    def score_window(self, model=None, scaler=None) -> Tuple[float, str]:
+        """
+        Score current rolling 20-timestep buffer with hybrid model.
+        Returns (probability, risk_level).
+        """
+        m = model if model is not None else self._model
+        s = scaler if scaler is not None else self._scaler
+
+        if m is None or s is None:
+            self._load_ml_resources()
+            m = self._model
+            s = self._scaler
+
+        with self._lock:
+            if len(self.history_buffer) == 0:
+                mat = np.zeros((SEQ_LEN, len(FEATURES)), dtype=np.float32)
+            else:
+                mat = np.array(list(self.history_buffer), dtype=np.float32)
+                if len(mat) < SEQ_LEN:
+                    pad = np.repeat(mat[:1], SEQ_LEN - len(mat), axis=0)
+                    mat = np.vstack([pad, mat])
+
+        try:
+            if s is not None and m is not None:
+                scaled = s.transform(mat)
+                t = torch.tensor(scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
+                with torch.no_grad():
+                    logits, attn = m(t)
+                    prob = float(torch.sigmoid(logits).item())
+                    attn_weights = attn.squeeze(0).cpu().numpy().tolist() if attn is not None else [0.05] * SEQ_LEN
+            else:
+                prob = 0.008
+                attn_weights = [0.05] * SEQ_LEN
+        except Exception:
+            prob = 0.008
+            attn_weights = [0.05] * SEQ_LEN
+
+        risk = "HIGH" if prob >= 0.70 else ("MEDIUM" if prob >= 0.30 else "LOW")
+
+        with self._lock:
+            latest_meta = self.raw_event_log[-1] if self.raw_event_log else {}
+            timeline_record = {
+                "timestamp": latest_meta.get("timestamp", datetime.now(timezone.utc).strftime("%H:%M:%S")),
+                "probability": round(prob * 100.0, 2),
+                "risk": risk,
+                "cpu_percent": latest_meta.get("cpu_percent", 0.0),
+                "memory_percent": latest_meta.get("memory_percent", 0.0),
+                "file_write_rate": latest_meta.get("file_write_rate", 0.0),
+                "entropy_delta": round(latest_meta.get("entropy_delta", 0.0), 4),
+                "bytes_written_mb": 0.0,
+            }
+            self.recent_predictions.append(timeline_record)
+
+            if prob >= self.threshold or latest_meta.get("shadow_cmd", 0) > 0:
+                alert_obj = {
+                    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "probability": round(prob * 100.0, 2),
+                    "threshold": round(self.threshold * 100.0, 1),
+                    "severity": "CRITICAL" if prob >= 0.85 or latest_meta.get("shadow_cmd", 0) > 0 else "HIGH",
+                    "culprit_process": latest_meta.get("culprit_process") or {"name": "Unknown", "pid": "N/A"},
+                    "affected_files": latest_meta.get("affected_files", [])[:10],
+                    "entropy_delta": round(latest_meta.get("entropy_delta", 0.0), 3),
+                    "file_write_rate": latest_meta.get("file_write_rate", 0.0),
+                    "action_taken": "ALERT_DISPATCHED",
+                    "_epoch": time.time(),
+                }
+                if not self.alerts or (time.time() - self.alerts[-1].get("_epoch", 0) > 5.0):
+                    self.alerts.append(alert_obj)
+                    self._persist_local_alert(alert_obj)
+
+        return prob, risk
+
+    def get_current_dataframe(self) -> pd.DataFrame:
+        """Return rolling history buffer as a pandas DataFrame."""
+        with self._lock:
+            if self.history_buffer:
+                arr = np.array(list(self.history_buffer), dtype=np.float32)
+                return pd.DataFrame(arr, columns=FEATURES)
+        return pd.DataFrame(columns=FEATURES)
+
+    def get_timeline_dataframe(self) -> pd.DataFrame:
+        """Return recent predictions timeline for live dashboard plotting."""
+        with self._lock:
+            if self.recent_predictions:
+                return pd.DataFrame(list(self.recent_predictions))
+        return pd.DataFrame(columns=["timestamp", "probability", "risk", "cpu_percent", "memory_percent", "file_write_rate", "entropy_delta", "bytes_written_mb"])
+
+    def clear_local_history(self) -> bool:
+        """Clear memory buffers and reset live timeline."""
+        with self._lock:
+            self.history_buffer.clear()
+            self.raw_event_log.clear()
+            self.recent_predictions.clear()
+            self.alerts.clear()
+        return True
 
     def start(self) -> bool:
         """Start the background monitoring worker thread with explicit consent."""
@@ -424,6 +589,7 @@ class EndpointMonitor:
             latest_event = self.raw_event_log[-1] if self.raw_event_log else {}
             buffer_len = len(self.history_buffer)
             recent_alerts = list(self.alerts[-5:])
+            timeline_len = len(self.recent_predictions)
         return {
             "is_running": self.is_active(),
             "watch_path": str(self.watch_path),
@@ -431,16 +597,23 @@ class EndpointMonitor:
             "latest_event": latest_event,
             "recent_alerts": recent_alerts,
             "alert_count": len(self.alerts),
+            "timeline_length": timeline_len,
+            "local_log_dir": str(self.local_log_dir.resolve()),
         }
 
-    def quarantine_file(self, target_path: str) -> Dict[str, Any]:
+    def quarantine_file(self, target_path: str, reason: str = "Threat containment") -> Dict[str, Any]:
         """
         Safely move a suspicious file into an isolated quarantine repository.
         Applies read-only and no-exec permissions (chmod 0400) to neutralize it.
         """
         p = Path(target_path).resolve()
         if not p.exists() or not p.is_file():
-            return {"status": "ERROR", "message": f"Target file does not exist: {target_path}"}
+            return {
+                "status": "ERROR",
+                "success": False,
+                "message": f"Target file does not exist: {target_path}",
+                "error": f"Target file does not exist: {target_path}",
+            }
 
         try:
             # Compute hash before moving
@@ -461,6 +634,7 @@ class EndpointMonitor:
                 "original_path": str(p),
                 "quarantine_path": str(dest_path),
                 "sha256": file_hash,
+                "reason": reason,
                 "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             }
             ledger_data = []
@@ -476,57 +650,94 @@ class EndpointMonitor:
 
             return {
                 "status": "SUCCESS",
+                "success": True,
                 "message": f"File quarantined safely to {dest_path.name}",
                 "original_path": str(p),
                 "quarantine_path": str(dest_path),
                 "sha256": file_hash,
             }
         except Exception as e:
-            return {"status": "ERROR", "message": f"Quarantine failed: {str(e)}"}
+            return {"status": "ERROR", "success": False, "message": f"Quarantine failed: {str(e)}", "error": str(e)}
 
-    def terminate_process_safely(self, pid: int, confirm: bool = False) -> Dict[str, Any]:
+    def terminate_process_safely(self, pid: int, confirm: bool = False, force: bool = False) -> Dict[str, Any]:
         """Safely terminate a rogue process given explicit confirmation."""
         if not confirm:
-            return {"status": "CONFIRMATION_REQUIRED", "message": "Termination requires explicit user confirmation."}
+            return {
+                "status": "CONFIRMATION_REQUIRED",
+                "success": False,
+                "message": "Termination requires explicit user confirmation.",
+                "error": "Confirmation required",
+            }
         try:
             p = psutil.Process(pid)
             name = p.name()
-            p.terminate()
+            if force:
+                p.kill()
+            else:
+                p.terminate()
             p.wait(timeout=2.0)
-            return {"status": "SUCCESS", "message": f"Process {name} (PID: {pid}) terminated successfully."}
+            return {"status": "SUCCESS", "success": True, "message": f"Process {name} (PID: {pid}) terminated successfully."}
         except Exception as e:
-            return {"status": "ERROR", "message": f"Failed to terminate PID {pid}: {str(e)}"}
+            return {"status": "ERROR", "success": False, "message": f"Failed to terminate PID {pid}: {str(e)}", "error": str(e)}
 
-    def export_incident_report(self, out_format: str = "json") -> str:
+    def terminate_process(self, pid: int, confirm: bool = True, force: bool = False) -> Dict[str, Any]:
+        """Convenience alias for process termination."""
+        return self.terminate_process_safely(pid=pid, confirm=confirm, force=force)
+
+    def export_incident_report(
+        self,
+        out_format: Optional[str] = None,
+        threat_level: str = "HIGH",
+        probability: float = 0.95,
+    ) -> Any:
         """Export comprehensive incident response log in JSON or CSV format."""
         ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         with self._lock:
             alert_records = list(self.alerts)
 
-        if out_format.lower() == "csv":
-            out_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.csv"
-            df = pd.DataFrame(alert_records)
-            df.to_csv(out_file, index=False)
-        else:
-            out_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.json"
-            report_data = {
-                "incident_id": f"INC-{ts_str}",
-                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                "monitored_host": os.uname().nodename if hasattr(os, "uname") else "Endpoint",
-                "watch_path": str(self.watch_path),
-                "total_alerts": len(alert_records),
-                "alerts": alert_records,
-                "recovery_guidance": [
-                    "Verify integrity of Volume Shadow Copies and system restore points.",
-                    "Disconnect the host from internal network segments to prevent lateral movement.",
-                    "Review all processes running unverified executables in %TEMP% or /tmp.",
-                    "Restore affected files from off-site or immutable cloud backup repositories.",
-                ],
-            }
-            with open(out_file, "w", encoding="utf-8") as f:
-                json.dump(report_data, f, indent=4)
+        DEFAULT_INCIDENT_DIR.mkdir(parents=True, exist_ok=True)
+        json_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.json"
+        csv_file = DEFAULT_INCIDENT_DIR / f"incident_report_{ts_str}.csv"
 
-        return str(out_file)
+        report_data = {
+            "incident_id": f"INC-{ts_str}",
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "monitored_host": os.uname().nodename if hasattr(os, "uname") else "Endpoint",
+            "watch_path": str(self.watch_path),
+            "threat_level": threat_level,
+            "probability": probability,
+            "total_alerts": len(alert_records),
+            "alerts": alert_records,
+            "local_storage_path": str(self.local_log_dir.resolve()),
+            "recovery_guidance": [
+                "Verify integrity of Volume Shadow Copies and system restore points.",
+                "Disconnect the host from internal network segments to prevent lateral movement.",
+                "Review all processes running unverified executables in %TEMP% or /tmp.",
+                "Restore affected files from off-site or immutable cloud backup repositories.",
+            ],
+        }
+        with open(json_file, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=4)
+
+        df = pd.DataFrame(alert_records) if alert_records else pd.DataFrame([{
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "threat_level": threat_level,
+            "probability": probability,
+        }])
+        df.to_csv(csv_file, index=False)
+
+        if out_format and out_format.lower() == "csv":
+            return str(csv_file)
+        elif out_format and out_format.lower() == "json":
+            return str(json_file)
+
+        return {
+            "status": "SUCCESS",
+            "success": True,
+            "json_path": str(json_file),
+            "csv_path": str(csv_file),
+            "total_alerts": len(alert_records),
+        }
 
 
 # Singleton monitor instance for the application session

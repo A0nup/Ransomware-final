@@ -46,3 +46,6 @@ Thumbs.db
 reports/incidents/*.json
 reports/incidents/*.csv
 !reports/incidents/.gitkeep
+data/live_threat_logs/*.jsonl
+data/live_threat_logs/*.json
+!data/live_threat_logs/.gitkeep

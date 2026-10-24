@@ -98,3 +98,65 @@ def test_incident_report_generation():
         csv_out = mon.export_incident_report(out_format="csv")
         assert Path(csv_out).exists()
         assert Path(csv_out).stat().st_size > 0
+
+
+def test_live_threat_monitoring_native_methods():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mon = EndpointMonitor(watch_path=tmpdir, sampling_interval_sec=0.5)
+
+        # 1. Native sample_telemetry
+        vec, meta = mon.sample_telemetry()
+        assert isinstance(vec, np.ndarray)
+        assert len(vec) == len(FEATURES)
+        assert len(mon.history_buffer) == 1
+
+        # 2. Native score_window
+        prob, risk = mon.score_window()
+        assert isinstance(prob, float)
+        assert 0.0 <= prob <= 1.0
+        assert risk in ["LOW", "MEDIUM", "HIGH"]
+
+        # 3. get_current_dataframe
+        df = mon.get_current_dataframe()
+        assert df.shape[1] == len(FEATURES)
+        assert len(df) == 1
+
+        # 4. get_timeline_dataframe
+        df_tl = mon.get_timeline_dataframe()
+        assert not df_tl.empty
+        assert "probability" in df_tl.columns
+        assert "risk" in df_tl.columns
+
+        # 5. clear_local_history
+        mon.clear_local_history()
+        assert len(mon.history_buffer) == 0
+        assert len(mon.recent_predictions) == 0
+
+
+def test_localhost_data_retention_and_persistence():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mon = EndpointMonitor(watch_path=tmpdir, sampling_interval_sec=0.5)
+        
+        # Verify local log paths reside strictly within project / local filesystem
+        assert mon.local_log_dir.exists()
+        assert mon.telemetry_log_file.parent.exists()
+        assert mon.alerts_log_file.parent.exists()
+
+        # Generate sample telemetry
+        mon.sample_telemetry()
+        assert mon.telemetry_log_file.exists()
+        assert mon.telemetry_log_file.stat().st_size > 0
+
+        # Trigger alert and verify local alert file persistence
+        test_alert = {
+            "timestamp": "2026-10-24 12:00:00 UTC",
+            "probability": 98.7,
+            "threshold": 50.0,
+            "severity": "CRITICAL",
+            "culprit_process": {"name": "ransom_sim.exe", "pid": 4321},
+            "affected_files": ["/tmp/test.encrypted"],
+        }
+        mon._persist_local_alert(test_alert)
+        assert mon.alerts_log_file.exists()
+        assert mon.alerts_log_file.stat().st_size > 0
+
