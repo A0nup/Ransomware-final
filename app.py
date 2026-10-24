@@ -340,11 +340,18 @@ def render_live_shield_public_fragment(monitor):
             st.write(f"- **Severity:** `{latest_alert.get('severity')}`")
             st.write(f"- **Culprit Process:** `{latest_alert.get('culprit_process')}`")
             st.write(f"- **Affected Files:** `{latest_alert.get('affected_files')}`")
-            if latest_alert.get("affected_files"):
-                first_file = latest_alert["affected_files"][0]
-                if st.button("🛡️ Quarantine Affected File Now", key=f"pub_q_{latest_alert.get('timestamp')}"):
-                    q_res = monitor.quarantine_file(first_file)
-                    st.success(f"Quarantined to `{q_res.get('quarantine_path')}` (read-only mode 0400).")
+            c_act1, c_act2 = st.columns(2)
+            with c_act1:
+                if latest_alert.get("affected_files"):
+                    first_file = latest_alert["affected_files"][0]
+                    if st.button("🛡️ Quarantine Affected File Now", key=f"pub_q_{latest_alert.get('timestamp')}"):
+                        q_res = monitor.quarantine_file(first_file)
+                        st.success(f"Quarantined to `{q_res.get('quarantine_path')}` (read-only mode 0400).")
+            with c_act2:
+                if st.button("🧹 Dismiss Alert & Reset Status", key=f"dismiss_{latest_alert.get('timestamp')}"):
+                    monitor.clear_local_history()
+                    st.success("Alert dismissed. Local monitoring restored to nominal baseline.")
+                    st.rerun()
 
     # Real-Time Plotly Timeline
     if hasattr(monitor, "get_timeline_dataframe"):
@@ -614,7 +621,7 @@ def render_public_mode():
 
         monitor = get_global_endpoint_monitor()
 
-        col_ctrl1, col_ctrl2 = st.columns([1, 1])
+        col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([1, 1, 1])
         with col_ctrl1:
             if not monitor.is_active():
                 if st.button("🟢 ACTIVATE LIVE THREAT SHIELD", type="primary", use_container_width=True):
@@ -633,6 +640,36 @@ def render_public_mode():
                     scaler = load_scaler(SCALER_PATH)
                     prob, risk = safe_score_window(monitor, model, scaler)
                     st.success(f"Assessment Complete: Current Workload is {risk} Risk ({prob*100:.2f}% Probability)")
+
+        with col_ctrl3:
+            if st.button("🧪 Simulate Attack Alert", use_container_width=True, help="Safely triggers a simulated ransomware threat alert to verify UI response"):
+                sim_alert = {
+                    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "probability": 98.7,
+                    "threshold": 50.0,
+                    "severity": "CRITICAL",
+                    "culprit_process": {"name": "simulated_ransom_payload.exe", "pid": 9876},
+                    "affected_files": ["sample_financial_records.xlsx.locked", "user_database.sql.locked"],
+                    "entropy_delta": 3.842,
+                    "file_write_rate": 142.0,
+                    "action_taken": "ALERT_DISPATCHED",
+                    "_epoch": time.time(),
+                }
+                monitor.alerts.append(sim_alert)
+                monitor._persist_local_alert(sim_alert)
+                with monitor._lock:
+                    monitor.recent_predictions.append({
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "probability": 98.7,
+                        "risk": "HIGH",
+                        "cpu_percent": 82.4,
+                        "memory_percent": 45.1,
+                        "file_write_rate": 142.0,
+                        "entropy_delta": 3.842,
+                        "bytes_written_mb": 24.5,
+                    })
+                st.warning("⚠️ Safe Simulation Triggered: Notice the real-time threat alert, red danger status, and quarantine action below!")
+                st.rerun()
 
         render_live_shield_public_fragment(monitor)
 
